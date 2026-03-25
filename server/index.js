@@ -75,18 +75,36 @@ io.on('connection', (socket) => {
     socket.emit('player-list', getPlayerNames(ROOM_CODE));
   });
 
-  // Player joins
+  // Player joins (allowed at any time)
   socket.on('join-room', ({ name }, callback) => {
     const room = getRoom(ROOM_CODE);
     if (!room) return callback({ error: 'Room not found' });
-    if (room.phase !== 'lobby') return callback({ error: 'Game already started' });
     const result = addPlayer(ROOM_CODE, name);
     if (!result) return callback({ error: 'Name already taken' });
+
+    // If joining mid-round, mark as answered so they don't block the allAnswered check
+    if (room.phase === 'question') {
+      room.players[name].answered = true;
+    }
 
     currentName = name;
     socket.join(ROOM_CODE);
     callback({ ok: true });
     io.to(ROOM_CODE).emit('player-list', getPlayerNames(ROOM_CODE));
+
+    // Sync late joiner to current game state
+    if (room.phase !== 'lobby') {
+      socket.emit('phase', room.phase);
+      if (room.currentQuestion) {
+        socket.emit('round-data', { round: room.round + 1, total: room.totalRounds, ...room.currentQuestion });
+      }
+      if (room.phase === 'question' || room.phase === 'reveal') {
+        socket.emit('yesno-results', getYesNoResults(room));
+      }
+      if (room.phase === 'scoreboard' || room.phase === 'gameover') {
+        socket.emit('scoreboard', getScoreboard(ROOM_CODE));
+      }
+    }
   });
 
   // Host starts the game
