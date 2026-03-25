@@ -9,7 +9,7 @@ import {
   createRoom, getRoom, addPlayer, removePlayer,
   getPlayerNames, getScoreboard, resetAnswers,
 } from './gameState.js';
-import { getRoundData, getYesNoResults, debateTopics } from './rounds.js';
+import { getRoundData, getYesNoResults, debateTopics, spectrumStatements } from './rounds.js';
 
 function getLanIP() {
   const nets = os.networkInterfaces();
@@ -88,6 +88,7 @@ io.on('connection', (socket) => {
     }
 
     currentName = name;
+    socket.playerName = name;
     socket.join(ROOM_CODE);
     callback({ ok: true });
     io.to(ROOM_CODE).emit('player-list', getPlayerNames(ROOM_CODE));
@@ -102,6 +103,30 @@ io.on('connection', (socket) => {
       }
       if (room.phase === 'scoreboard') {
         socket.emit('scoreboard', getScoreboard(ROOM_CODE));
+      }
+      if (room.phase === 'spectrum' && room.spectrum) {
+        const sp = room.spectrum;
+        socket.emit('spectrum-state', {
+          phase: sp.phase,
+          totalPlayers: Object.keys(room.players).length,
+          readyCount: Object.keys(sp.playerPicks).length,
+          defendPool: sp.defendPool,
+          usedSpeakers: sp.usedSpeakers,
+          currentSpeaker: sp.currentSpeaker,
+          currentStatement: sp.currentStatement,
+          speakerValue: sp.phase === 'results' ? sp.speakerValue : null,
+          guesses: sp.phase === 'results' ? sp.guesses : {},
+          guessCount: Object.keys(sp.guesses).length,
+          timeLeft: sp.timeLeft,
+          scores: sp.phase === 'results' ? sp.roundScores : null,
+        });
+        // If in picking phase, give them statements
+        if (sp.phase === 'picking') {
+          if (!sp.playerStatements[name]) {
+            sp.playerStatements[name] = pickRandom(spectrumStatements, 4);
+          }
+          socket.emit('spectrum-your-statements', sp.playerStatements[name]);
+        }
       }
       if (room.phase === 'debate' && room.debate) {
         const d = room.debate;
@@ -231,7 +256,25 @@ io.on('connection', (socket) => {
           thumbsUp: d.thumbsUp, timeLeft: 0, winner: null,
         });
       }
-      // Add more stages here as they're built
+      if (stage === 'spectrum') {
+        room.spectrum = {
+          phase: 'title',
+          playerPicks: {},
+          defendPool: [],
+          usedSpeakers: [],
+          currentSpeaker: null,
+          currentStatement: null,
+          speakerValue: null,
+          guesses: {},
+          timeLeft: 0,
+          timerInterval: null,
+          roundScores: null,
+          playerStatements: {},
+        };
+        room.phase = 'spectrum';
+        io.to(ROOM_CODE).emit('phase', 'spectrum');
+        broadcastSpectrumState();
+      }
     });
 
   // ── Stage 2: Debate Duel ──────────────────────────────
@@ -462,6 +505,233 @@ io.on('connection', (socket) => {
     });
 
     // ── End Stage 2 ─────────────────────────────────────
+
+    // ── Stage 3: The Spectrum ─────────────────────────────
+    function broadcastSpectrumState() {
+      const room = getRoom(ROOM_CODE);
+      if (!room || !room.spectrum) return;
+      const s = room.spectrum;
+      io.to(ROOM_CODE).emit('spectrum-state', {
+        phase: s.phase,
+        totalPlayers: Object.keys(room.players).length,
+        readyCount: Object.keys(s.playerPicks).length,
+        defendPool: s.defendPool,
+        usedSpeakers: s.usedSpeakers,
+        currentSpeaker: s.currentSpeaker,
+        currentStatement: s.currentStatement,
+        speakerValue: s.phase === 'results' ? s.speakerValue : null,
+        guesses: s.phase === 'results' ? s.guesses : {},
+        guessCount: Object.keys(s.guesses).length,
+        timeLeft: s.timeLeft,
+        scores: s.phase === 'results' ? s.roundScores : null,
+      });
+    }
+
+    // Helper: pick N random unique items from array
+    function pickRandom(arr, n) {
+      const shuffled = [...arr].sort(() => Math.random() - 0.5);
+      return shuffled.slice(0, n);
+    }
+
+    // Host starts Stage 3
+    socket.on('spectrum-start', () => {
+      const room = getRoom(ROOM_CODE);
+      if (!room || socket.id !== room.host) return;
+      room.spectrum = {
+        phase: 'title',
+        playerPicks: {},
+        defendPool: [],
+        usedSpeakers: [],
+        currentSpeaker: null,
+        currentStatement: null,
+        speakerValue: null,
+        guesses: {},
+        timeLeft: 0,
+        timerInterval: null,
+        roundScores: null,
+        // Each player gets their own random set of 4 statements
+        playerStatements: {},
+      };
+      room.phase = 'spectrum';
+      io.to(ROOM_CODE).emit('phase', 'spectrum');
+      broadcastSpectrumState();
+    });
+
+    // Host moves from title to picking phase
+    socket.on('spectrum-start-picking', () => {
+      const room = getRoom(ROOM_CODE);
+      if (!room || socket.id !== room.host || !room.spectrum) return;
+      room.spectrum.phase = 'picking';
+      room.spectrum.playerPicks = {};
+      room.spectrum.defendPool = [];
+      room.spectrum.guesses = {};
+      room.spectrum.currentSpeaker = null;
+      room.spectrum.currentStatement = null;
+      room.spectrum.speakerValue = null;
+      room.spectrum.roundScores = null;
+      // Generate 4 random statements per player
+      room.spectrum.playerStatements = {};
+      for (const name of Object.keys(room.players)) {
+        room.spectrum.playerStatements[name] = pickRandom(spectrumStatements, 4);
+      }
+      broadcastSpectrumState();
+      // Send each player their personal statements
+      for (const [id, sock] of io.of('/').sockets) {
+        if (sock.playerName && room.spectrum.playerStatements[sock.playerName]) {
+          sock.emit('spectrum-your-statements', room.spectrum.playerStatements[sock.playerName]);
+        }
+      }
+    });
+
+    // Player rerolls for new statements
+    socket.on('spectrum-reroll', () => {
+      const room = getRoom(ROOM_CODE);
+      if (!room || !currentName || !room.spectrum) return;
+      if (room.spectrum.phase !== 'picking') return;
+      if (room.spectrum.playerPicks[currentName]) return; // already submitted
+      const newStatements = pickRandom(spectrumStatements, 4);
+      room.spectrum.playerStatements[currentName] = newStatements;
+      socket.emit('spectrum-your-statements', newStatements);
+    });
+
+    // Player submits their pick: chosen statement + slider value
+    socket.on('spectrum-submit', ({ statement, value }) => {
+      const room = getRoom(ROOM_CODE);
+      if (!room || !currentName || !room.spectrum) return;
+      if (room.spectrum.phase !== 'picking') return;
+      if (room.spectrum.playerPicks[currentName]) return; // already submitted
+      if (typeof value !== 'number' || value < 0 || value > 100) return;
+      room.spectrum.playerPicks[currentName] = { statement, value, willDefend: null };
+      broadcastSpectrumState();
+    });
+
+    // Player opts in/out to defend
+    socket.on('spectrum-defend', ({ willDefend }) => {
+      const room = getRoom(ROOM_CODE);
+      if (!room || !currentName || !room.spectrum) return;
+      if (room.spectrum.phase !== 'picking') return;
+      const pick = room.spectrum.playerPicks[currentName];
+      if (!pick || pick.willDefend !== null) return; // no pick yet or already decided
+      pick.willDefend = !!willDefend;
+      if (willDefend) {
+        room.spectrum.defendPool.push(currentName);
+      }
+      broadcastSpectrumState();
+    });
+
+    // Host continues after all players are done — reveal first speaker
+    socket.on('spectrum-continue', () => {
+      const room = getRoom(ROOM_CODE);
+      if (!room || socket.id !== room.host || !room.spectrum) return;
+      if (room.spectrum.phase !== 'picking') return;
+      pickNextSpeaker(room);
+    });
+
+    function pickNextSpeaker(room) {
+      const s = room.spectrum;
+      // Find someone from the defend pool who hasn't spoken yet
+      const available = s.defendPool.filter(n => !s.usedSpeakers.includes(n));
+      if (available.length === 0) {
+        // All speakers done
+        s.phase = 'done';
+        broadcastSpectrumState();
+        io.to(ROOM_CODE).emit('scoreboard', getScoreboard(ROOM_CODE));
+        return;
+      }
+      const speaker = available[Math.floor(Math.random() * available.length)];
+      s.currentSpeaker = speaker;
+      s.currentStatement = s.playerPicks[speaker].statement;
+      s.speakerValue = s.playerPicks[speaker].value;
+      s.guesses = {};
+      s.roundScores = null;
+      s.phase = 'speaker-reveal';
+      broadcastSpectrumState();
+    }
+
+    // Host starts the 3-minute guessing timer
+    socket.on('spectrum-start-timer', () => {
+      const room = getRoom(ROOM_CODE);
+      if (!room || socket.id !== room.host || !room.spectrum) return;
+      if (room.spectrum.phase !== 'speaker-reveal') return;
+      const s = room.spectrum;
+      s.phase = 'guessing';
+      s.timeLeft = 180;
+      broadcastSpectrumState();
+
+      if (s.timerInterval) clearInterval(s.timerInterval);
+      s.timerInterval = setInterval(() => {
+        s.timeLeft--;
+        io.to(ROOM_CODE).emit('spectrum-timer', s.timeLeft);
+        if (s.timeLeft <= 0) {
+          clearInterval(s.timerInterval);
+          s.timerInterval = null;
+          finishSpectrumRound(room);
+        }
+      }, 1000);
+    });
+
+    // Player submits their guess
+    socket.on('spectrum-guess', ({ value }) => {
+      const room = getRoom(ROOM_CODE);
+      if (!room || !currentName || !room.spectrum) return;
+      if (room.spectrum.phase !== 'guessing') return;
+      if (currentName === room.spectrum.currentSpeaker) return; // speaker can't guess
+      if (room.spectrum.guesses[currentName] !== undefined) return; // already guessed
+      if (typeof value !== 'number' || value < 0 || value > 100) return;
+      room.spectrum.guesses[currentName] = value;
+      broadcastSpectrumState();
+    });
+
+    // Host reveals early
+    socket.on('spectrum-reveal', () => {
+      const room = getRoom(ROOM_CODE);
+      if (!room || socket.id !== room.host || !room.spectrum) return;
+      if (room.spectrum.phase !== 'guessing') return;
+      if (room.spectrum.timerInterval) {
+        clearInterval(room.spectrum.timerInterval);
+        room.spectrum.timerInterval = null;
+      }
+      finishSpectrumRound(room);
+    });
+
+    function finishSpectrumRound(room) {
+      const s = room.spectrum;
+      const speakerVal = s.speakerValue;
+      const scores = {};
+      // Calculate distance-based points: max 1000 pts, lose 10 per % off
+      for (const [name, guess] of Object.entries(s.guesses)) {
+        const distance = Math.abs(guess - speakerVal);
+        const pts = Math.max(0, 1000 - distance * 10);
+        scores[name] = { guess, distance, points: pts, perfect: distance === 0 };
+        if (room.players[name]) {
+          room.players[name].score += pts;
+        }
+      }
+      s.usedSpeakers.push(s.currentSpeaker);
+      s.roundScores = scores;
+      s.phase = 'results';
+      broadcastSpectrumState();
+      io.to(ROOM_CODE).emit('scoreboard', getScoreboard(ROOM_CODE));
+    }
+
+    // Host picks next speaker
+    socket.on('spectrum-next-speaker', () => {
+      const room = getRoom(ROOM_CODE);
+      if (!room || socket.id !== room.host || !room.spectrum) return;
+      if (room.spectrum.phase !== 'results') return;
+      pickNextSpeaker(room);
+    });
+
+    // Host ends spectrum stage
+    socket.on('spectrum-end', () => {
+      const room = getRoom(ROOM_CODE);
+      if (!room || socket.id !== room.host || !room.spectrum) return;
+      room.phase = 'gameover';
+      io.to(ROOM_CODE).emit('phase', 'gameover');
+      io.to(ROOM_CODE).emit('scoreboard', getScoreboard(ROOM_CODE));
+    });
+
+    // ── End Stage 3 ──────────────────────────────────────
 
   socket.on('disconnect', () => {
     if (currentName) {

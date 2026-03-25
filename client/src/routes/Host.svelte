@@ -1,9 +1,10 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import socket from '../lib/socket.js';
-  import { players, phase, roundData, scoreboard, yesnoResults, yesnoReasons, debateState } from '../lib/store.js';
+  import { players, phase, roundData, scoreboard, yesnoResults, yesnoReasons, debateState, spectrumState } from '../lib/store.js';
   import YesNo from './rounds/YesNo.svelte';
   import Debate from './rounds/Debate.svelte';
+  import Spectrum from './rounds/Spectrum.svelte';
 
   let roomCode = '';
   let showQRModal = false;
@@ -27,6 +28,10 @@
     socket.on('debate-timer', (t) => {
       debateState.update(s => s ? { ...s, timeLeft: t } : s);
     });
+    socket.on('spectrum-state', (s) => spectrumState.set(s));
+    socket.on('spectrum-timer', (t) => {
+      spectrumState.update(s => s ? { ...s, timeLeft: t } : s);
+    });
   });
 
   onDestroy(() => {
@@ -40,6 +45,8 @@
     socket.off('yesno-reasons-reset');
     socket.off('debate-state');
     socket.off('debate-timer');
+    socket.off('spectrum-state');
+    socket.off('spectrum-timer');
   });
 
   function startGame() { socket.emit('start-game'); }
@@ -48,6 +55,7 @@
   function showScoreboard() { socket.emit('show-scoreboard'); }
   function voteFor(name) { socket.emit('vote', { playerName: name }); }
   function startDebate() { socket.emit('debate-start'); }
+  function startSpectrum() { socket.emit('spectrum-start'); }
   function skipToStage(stage) { socket.emit('skip-to-stage', { stage }); }
 </script>
 
@@ -55,6 +63,9 @@
   <!-- Skip to Stage 2 (fixed corner button, only during Stage 1 phases) -->
   {#if $phase === 'lobby' || $phase === 'title1' || $phase === 'question' || $phase === 'reveal' || $phase === 'scoreboard'}
     <button class="btn-skip-stage" on:click={() => skipToStage('debate')}>SKIP TO STAGE 2 →</button>
+  {/if}
+  {#if $phase === 'lobby' || $phase === 'title1' || $phase === 'question' || $phase === 'reveal' || $phase === 'scoreboard' || $phase === 'title2' || $phase === 'debate'}
+    <button class="btn-skip-stage btn-skip-stage-3" on:click={() => skipToStage('spectrum')}>SKIP TO STAGE 3 →</button>
   {/if}
 
   <!-- QR icon button (visible during active game) -->
@@ -79,50 +90,55 @@
 
   {#if $phase === 'lobby'}
     <div class="lobby">
-      <!-- Hero / Fire header -->
-      <div class="hero">
-        <div class="fire-icon">🔥</div>
-        <h1 class="logo">THE HOT SEAT</h1>
-        <p class="tagline">SETTLE IT. RIGHT NOW.</p>
-      </div>
+      <!-- Left column: hero + join + players + start -->
+      <div class="lobby-main">
+        <div class="hero">
+          <div class="fire-icon">🔥</div>
+          <h1 class="logo">THE HOT SEAT</h1>
+          <p class="tagline">SETTLE IT. RIGHT NOW.</p>
+        </div>
 
-      <div class="join-card">
-        <div class="dotted-border">
-          <span class="join-label">JOIN THE GAME</span>
-          <div class="code-display">
-            <span class="code">{roomCode}</span>
+        <div class="join-card">
+          <div class="dotted-border">
+            <span class="join-label">JOIN THE GAME</span>
+            <div class="code-display">
+              <span class="code">{roomCode}</span>
+            </div>
+            <img src="/api/qr" alt="QR Code" class="qr" />
+            <a class="join-link" href={joinUrl} target="_blank">{joinUrl}</a>
           </div>
-          <img src="/api/qr" alt="QR Code" class="qr" />
-          <a class="join-link" href={joinUrl} target="_blank">{joinUrl}</a>
         </div>
-      </div>
 
-      <div class="player-list">
-        <h3 class="section-title">PLAYERS IN THE HOT SEAT ({$players.length})</h3>
-        <div class="player-tags">
-          {#each $players as name}
-            <div class="player-tag">{name}</div>
-          {/each}
+        <div class="player-list">
+          <h3 class="section-title">PLAYERS IN THE HOT SEAT ({$players.length})</h3>
+          <div class="player-tags">
+            {#each $players as name}
+              <div class="player-tag">{name}</div>
+            {/each}
+          </div>
+          {#if $players.length === 0}
+            <p class="waiting">Waiting for brave souls to join...</p>
+          {/if}
         </div>
-        {#if $players.length === 0}
-          <p class="waiting">Waiting for brave souls to join...</p>
+        {#if $players.length >= 1}
+          <button class="btn-start" on:click={startGame}>
+            🔥 START THE HEAT 🔥
+          </button>
         {/if}
       </div>
-      {#if $players.length >= 1}
-        <button class="btn-start" on:click={startGame}>
-          🔥 START THE HEAT 🔥
-        </button>
-      {/if}
 
-      <div class="rules-card">
-        <div class="dotted-border rules">
-          <span class="rules-label">HOUSE RULES</span>
-          <ul class="rules-list">
-            <li><strong>Keep it Fun:</strong> We're all here to have a good time. Play fair and be a good sport!</li>
-            <li><strong>Watch Your Language:</strong> Please keep the chat clean. No swearing or offensive language.</li>
-            <li><strong>Identity Matters:</strong> Choose a username that is respectful. Avoid anything suggestive, hateful, or inappropriate.</li>
-            <li><strong>Respect Others:</strong> Treat your fellow players the way you'd want to be treated.</li>
-          </ul>
+      <!-- Right column: rules pinned to the side -->
+      <div class="lobby-side">
+        <div class="rules-card">
+          <div class="dotted-border rules">
+            <span class="rules-label">HOUSE RULES</span>
+            <ul class="rules-list">
+              <li><strong>Keep it Fun:</strong> We're all here to have a good time. Play fair and be a good sport!</li>
+              <li><strong>Watch Your Language:</strong> Please keep the chat clean. No swearing or offensive language.</li>
+              <li><strong>Identity Matters:</strong> Choose a username that is respectful. Avoid anything suggestive, hateful, or inappropriate.</li>
+              <li><strong>Respect Others:</strong> Treat your fellow players the way you'd want to be treated.</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>
@@ -197,6 +213,45 @@
         🎤 START 🎤
       </button>
     </div>
+
+  {:else if $phase === 'title3'}
+    <div class="title-screen">
+      <div class="hero">
+        <div class="fire-icon">🎯</div>
+        <h1 class="logo">THE SPECTRUM</h1>
+        <p class="tagline">STAGE 3</p>
+      </div>
+      <div class="title-description">
+        <p>Everyone picks a statement and rates it. Guess where the Speaker placed their slider — the closer you are, the more points you earn!</p>
+      </div>
+      <button class="btn-start" on:click={startSpectrum}>
+        🎯 START 🎯
+      </button>
+    </div>
+
+  {:else if $phase === 'spectrum'}
+    <div class="round-display">
+      <Spectrum state={$spectrumState} />
+    </div>
+
+  {:else if $phase === 'gameover'}
+    <div class="scoreboard-screen">
+      <div class="hero">
+        <div class="fire-icon">🏆</div>
+        <h1 class="logo">GAME OVER</h1>
+      </div>
+      <div class="scores">
+        {#each $scoreboard as entry, i}
+          <div class="score-row" class:first={i === 0} class:second={i === 1} class:third={i === 2}>
+            <span class="rank">
+              {#if i === 0}👑{:else if i === 1}🥈{:else if i === 2}🥉{:else}#{i + 1}{/if}
+            </span>
+            <span class="name">{entry.name}</span>
+            <span class="pts">{entry.score} PTS</span>
+          </div>
+        {/each}
+      </div>
+    </div>
   {/if}
 </div>
 
@@ -208,10 +263,30 @@
     justify-content: center;
     padding: 1rem;
   }
-  .lobby, .round-display, .reveal-screen, .scoreboard-screen, .gameover-screen, .title-screen {
+  .round-display, .reveal-screen, .scoreboard-screen, .gameover-screen, .title-screen {
     text-align: center;
     width: 100%;
     max-width: 700px;
+  }
+
+  /* ── Lobby two-column layout ── */
+  .lobby {
+    display: flex;
+    align-items: flex-start;
+    gap: 2rem;
+    width: 100%;
+    max-width: 1100px;
+  }
+  .lobby-main {
+    flex: 1;
+    text-align: center;
+    min-width: 0;
+  }
+  .lobby-side {
+    width: 280px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 1rem;
   }
 
   /* ── Hero / Logo ── */
@@ -251,7 +326,7 @@
   /* ── Join Card ── */
   .join-card {
     margin: 1rem auto;
-    max-width: 340px;
+    max-width: 300px;
   }
   .dotted-border {
     border: 3px dashed var(--accent-yellow);
@@ -278,14 +353,18 @@
     text-shadow: 3px 3px 0 var(--charcoal);
   }
   .qr {
-    width: 120px;
-    height: 120px;
-    margin: 0.5rem auto 0;
+    width: 220px;
+    height: 220px;
+    margin: 0.75rem auto 0;
     display: block;
     background: var(--cream);
-    padding: 8px;
-    border-radius: 8px;
+    padding: 10px;
+    border-radius: 10px;
     border: 3px solid var(--charcoal);
+  }
+  .modal-box .qr {
+    width: 280px;
+    height: 280px;
   }
 
   /* ── Players ── */
@@ -412,6 +491,9 @@
     z-index: 50;
     white-space: nowrap;
   }
+  .btn-skip-stage-3 {
+    bottom: 2.8rem;
+  }
   .btn-skip-stage:hover {
     opacity: 1;
     background: rgba(0, 0, 0, 0.8);
@@ -526,7 +608,7 @@
     padding: 2rem 2.5rem;
     text-align: center;
     position: relative;
-    max-width: 320px;
+    max-width: 380px;
     width: 90%;
   }
   .modal-close {
@@ -557,8 +639,8 @@
 
   /* ── Rules Card ── */
   .rules-card {
-    margin: 2rem auto;
-    max-width: 440px;
+    margin-top: 0;
+    width: 100%;
   }
   .dotted-border.rules {
     border-color: var(--accent-orange);
