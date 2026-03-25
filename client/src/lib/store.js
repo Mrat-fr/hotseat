@@ -9,3 +9,4 @@ export const answers = writable([]);
 export const reveal = writable(null);
 export const yesnoResults = writable({ yes: [], no: [] });
 export const yesnoReasons = writable([]);
+export const debateState = writable(null);

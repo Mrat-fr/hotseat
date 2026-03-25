@@ -1,8 +1,9 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import socket from '../lib/socket.js';
-  import { players, phase, roundData, scoreboard, yesnoResults, yesnoReasons } from '../lib/store.js';
+  import { players, phase, roundData, scoreboard, yesnoResults, yesnoReasons, debateState } from '../lib/store.js';
   import YesNo from './rounds/YesNo.svelte';
+  import Debate from './rounds/Debate.svelte';
 
   let roomCode = '';
   let showQRModal = false;
@@ -22,6 +23,10 @@
       return [...arr, { ...r, x: 5 + Math.random() * 70, y: 5 + Math.random() * 70, dur: 6 + Math.random() * 6, delay: Math.random() * 2 }];
     }));
     socket.on('yesno-reasons-reset', () => yesnoReasons.set([]));
+    socket.on('debate-state', (s) => debateState.set(s));
+    socket.on('debate-timer', (t) => {
+      debateState.update(s => s ? { ...s, timeLeft: t } : s);
+    });
   });
 
   onDestroy(() => {
@@ -33,12 +38,16 @@
     socket.off('yesno-results');
     socket.off('yesno-reason');
     socket.off('yesno-reasons-reset');
+    socket.off('debate-state');
+    socket.off('debate-timer');
   });
 
   function startGame() { socket.emit('start-game'); }
   function nextRound() { socket.emit('next-round'); }
   function showScoreboard() { socket.emit('show-scoreboard'); }
   function voteFor(name) { socket.emit('vote', { playerName: name }); }
+  function startDebate() { socket.emit('debate-start'); }
+  function skipToStage(stage) { socket.emit('skip-to-stage', { stage }); }
 </script>
 
 <div class="host">
@@ -98,6 +107,7 @@
           🔥 START THE HEAT 🔥
         </button>
       {/if}
+      <button class="btn-skip-stage" on:click={() => skipToStage('debate')}>SKIP TO STAGE 2: DEBATE DUEL →</button>
     </div>
 
   {:else if $phase === 'question'}
@@ -105,6 +115,8 @@
       {#if $roundData?.type === 'yesno'}
         <YesNo data={$roundData} results={$yesnoResults} reasons={$yesnoReasons} />
       {/if}
+      <button class="btn-skip" on:click={nextRound}>SKIP QUESTION →</button>
+      <button class="btn-skip-stage" on:click={() => skipToStage('debate')}>SKIP TO STAGE 2 →</button>
     </div>
 
   {:else if $phase === 'reveal'}
@@ -113,6 +125,7 @@
         <YesNo data={$roundData} results={$yesnoResults} reasons={$yesnoReasons} />
       {/if}
       <button class="btn-action" on:click={nextRound}>NEXT QUESTION →</button>
+      <button class="btn-skip-stage" on:click={() => skipToStage('debate')}>SKIP TO STAGE 2 →</button>
     </div>
 
   {:else if $phase === 'scoreboard'}
@@ -133,6 +146,12 @@
         {/each}
       </div>
       <button class="btn-action" on:click={nextRound}>NEXT ROUND →</button>
+      <button class="btn-skip-stage" on:click={() => skipToStage('debate')}>SKIP TO STAGE 2 →</button>
+    </div>
+
+  {:else if $phase === 'debate'}
+    <div class="round-display">
+      <Debate state={$debateState} />
     </div>
 
   {:else if $phase === 'gameover'}
@@ -159,6 +178,7 @@
           </div>
         {/each}
       </div>
+      <button class="btn-action" on:click={startDebate}>NEXT STAGE: DEBATE DUEL</button>
     </div>
   {/if}
 </div>
@@ -332,6 +352,51 @@
   .btn-action:active {
     transform: translate(2px, 2px);
     box-shadow: 2px 2px 0 var(--charcoal);
+  }
+  .btn-skip {
+    background: transparent;
+    color: var(--cream-dim);
+    border: 2px solid var(--cream-dim);
+    padding: 0.5rem 1.5rem;
+    border-radius: 8px;
+    font-family: var(--font-hero);
+    font-size: 1rem;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    margin-top: 1.5rem;
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.3);
+    transition: transform 0.1s, box-shadow 0.1s, color 0.15s, border-color 0.15s;
+  }
+  .btn-skip:hover {
+    color: var(--cream);
+    border-color: var(--cream);
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 rgba(0,0,0,0.3);
+  }
+  .btn-skip:active {
+    transform: translate(2px, 2px);
+    box-shadow: 0 0 0 rgba(0,0,0,0.3);
+  }
+  .btn-skip-stage {
+    background: transparent;
+    color: var(--cream-dim);
+    border: none;
+    padding: 0.4rem 1rem;
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    margin-top: 1.5rem;
+    opacity: 0.4;
+    transition: opacity 0.15s, color 0.15s;
+    text-decoration: underline;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .btn-skip-stage:hover {
+    opacity: 1;
+    color: var(--cream);
   }
 
   /* ── Scoreboard ── */
