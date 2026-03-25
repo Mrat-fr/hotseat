@@ -5,8 +5,11 @@
   import YesNo from './rounds/YesNo.svelte';
 
   let roomCode = '';
+  let showQRModal = false;
+  let joinUrl = '';
 
   onMount(() => {
+    joinUrl = window.location.origin + '/#/play';
     socket.emit('join-host');
 
     socket.on('room-code', (code) => roomCode = code);
@@ -39,6 +42,26 @@
 </script>
 
 <div class="host">
+  <!-- QR icon button (visible during active game) -->
+  {#if $phase !== 'lobby'}
+    <button class="qr-fab" on:click={() => showQRModal = true} title="Show join QR">
+      📱
+    </button>
+  {/if}
+
+  <!-- QR Modal -->
+  {#if showQRModal}
+    <div class="modal-backdrop" on:click={() => showQRModal = false}>
+      <div class="modal-box" on:click|stopPropagation>
+        <button class="modal-close" on:click={() => showQRModal = false}>✕</button>
+        <span class="join-label">JOIN THE GAME</span>
+        <div class="code-display"><span class="code">{roomCode}</span></div>
+        <img src="/api/qr" alt="QR Code" class="qr" />
+        <a class="join-link" href={joinUrl} target="_blank">{joinUrl}</a>
+      </div>
+    </div>
+  {/if}
+
   {#if $phase === 'lobby'}
     <div class="lobby">
       <!-- Hero / Fire header -->
@@ -55,6 +78,7 @@
             <span class="code">{roomCode}</span>
           </div>
           <img src="/api/qr" alt="QR Code" class="qr" />
+          <a class="join-link" href={joinUrl} target="_blank">{joinUrl}</a>
         </div>
       </div>
 
@@ -371,6 +395,80 @@
     font-size: 2rem;
     color: var(--cream);
   }
+
+  /* ── QR FAB ── */
+  .qr-fab {
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    background: var(--charcoal);
+    border: 3px solid var(--accent-yellow);
+    font-size: 1.4rem;
+    cursor: pointer;
+    box-shadow: 3px 3px 0 var(--accent-yellow);
+    transition: transform 0.1s, box-shadow 0.1s;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .qr-fab:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 4px 4px 0 var(--accent-yellow);
+  }
+  .qr-fab:active {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0 var(--accent-yellow);
+  }
+
+  /* ── Modal ── */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+  }
+  .modal-box {
+    background: var(--bg-primary);
+    border: 3px dashed var(--accent-yellow);
+    border-radius: 16px;
+    padding: 2rem 2.5rem;
+    text-align: center;
+    position: relative;
+    max-width: 320px;
+    width: 90%;
+  }
+  .modal-close {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.8rem;
+    background: none;
+    border: none;
+    color: var(--cream-dim);
+    font-size: 1.2rem;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .modal-close:hover { color: var(--cream); }
+
+  /* ── Join link ── */
+  .join-link {
+    display: block;
+    margin-top: 0.75rem;
+    color: var(--cream-dim);
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    word-break: break-all;
+    text-decoration: underline;
+    opacity: 0.7;
+  }
+  .join-link:hover { opacity: 1; color: var(--cream); }
 
   /* ── Animations ── */
   @keyframes pop {
