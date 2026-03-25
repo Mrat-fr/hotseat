@@ -47,6 +47,65 @@ export function getRoundData(roundNumber) {
   return { type: 'yesno', question };
 }
 
+// Stage 3: The Spectrum — slider-based opinion statements
+export const spectrumStatements = [
+  // Ethics & Morality
+  'A person who commits a crime due to poverty is morally innocent.',
+  'It is more ethical to save one young child than five elderly people.',
+  'We should hold people accountable for thoughts they haven\'t acted on yet.',
+  'Lying to someone "for their own good" is a form of manipulation, not kindness.',
+  'If you witness a crime and do nothing, you are as guilty as the perpetrator.',
+  'The death of one person you love is a greater tragedy than the death of 1,000 strangers.',
+  'Cannibalism is morally acceptable if it is the only way to survive.',
+  'It is unethical to bring a child into the world given the current state of the environment.',
+  '"Common sense" is just a collection of prejudices learned by age eighteen.',
+  'Forgiveness should be earned, never given freely.',
+  // Relationships & Loyalty
+  'You should never tell your partner about a one-time mistake if it would only hurt them.',
+  'It is impossible to truly love two people at the same time.',
+  'If you wouldn\'t die for your best friend, you aren\'t actually "best friends."',
+  'Parents should have the final say in who their children marry.',
+  'Keeping tabs on a partner\'s location via GPS is a sign of care, not control.',
+  'You should always take your sibling\'s side in a public argument, even if they are wrong.',
+  'Long-distance relationships are fundamentally unsustainable.',
+  'It is acceptable to ghost someone if you feel they are becoming too emotionally demanding.',
+  'A marriage without children is more likely to be successful than one with them.',
+  'You should be allowed to read your partner\'s private messages if you have a "gut feeling."',
+  // Society & Future
+  'Voting should be a requirement, with fines for those who stay home.',
+  'We should genetically engineer humans to be more empathetic and less aggressive.',
+  'High-speed internet should be a free human right provided by the state.',
+  'History should be rewritten if the "truth" causes too much civil unrest today.',
+  'Within 100 years, traditional "family units" will be obsolete.',
+  'People should be required to pass a test before being allowed to have children.',
+  'A society that prioritizes equality of outcome is destined to fail.',
+  'All drugs should be legalized and regulated by the government.',
+  'The "Golden Age" of humanity has already passed.',
+  'We should prioritize colonizing Mars over fixing Earth\'s climate.',
+  // Success & Ambition
+  'Money can, in fact, buy long-term happiness.',
+  'Formal education is a waste of time for those who are truly naturally gifted.',
+  'It is better to be the "dumbest" person in a room of geniuses than the smartest in a room of fools.',
+  'If you aren\'t willing to step on others, you don\'t actually want to win.',
+  'Professional burnout is a sign of weakness, not an overworked system.',
+  'Your job title is the most accurate reflection of your value to society.',
+  'A "good" life is measured by the amount of money you leave behind for others.',
+  'It is better to have tried and failed miserably than to have never tried at all.',
+  'Nepotism is a natural and acceptable way to help those you love.',
+  'You should quit your job immediately if it doesn\'t make you feel "passionate" every day.',
+  // Personal Philosophy
+  'Nostalgia is a trap that prevents people from living in the present.',
+  'Most people only do "good deeds" because they want to feel better about themselves.',
+  'True altruism does not exist.',
+  'Religion has done more harm to the world than any war in history.',
+  'It is better to be deeply unhappy and "awake" than blissfully ignorant.',
+  'Silence in the face of injustice is the same as supporting the oppressor.',
+  'We are all essentially the same person living different lives.',
+  'Pain is a more effective teacher than pleasure.',
+  'Boredom is the greatest threat to a person\'s mental well-being.',
+  'Life has no inherent meaning; we are just biological accidents.',
+];
+
 export function getYesNoResults(room) {
   const yes = [];
   const no = [];

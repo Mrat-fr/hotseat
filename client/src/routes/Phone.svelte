@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import socket from '../lib/socket.js';
-  import { phase, roundData, scoreboard, myScore, reveal, debateState } from '../lib/store.js';
+  import { phase, roundData, scoreboard, myScore, reveal, debateState, spectrumState } from '../lib/store.js';
 
   let playerName = '';
   let joined = false;
@@ -13,6 +13,15 @@
 
   // Debate state
   let debateOptedIn = false;
+
+  // Spectrum state
+  let spectrumStatements = [];
+  let spectrumSelected = null; // index of chosen statement
+  let spectrumSlider = 50;
+  let spectrumSubmitted = false;
+  let spectrumDefendChosen = false;
+  let spectrumGuess = 50;
+  let spectrumGuessSubmitted = false;
 
   onMount(() => {
     socket.on('phase', (p) => {
@@ -43,6 +52,30 @@
     socket.on('debate-timer', (t) => {
       debateState.update(s => s ? { ...s, timeLeft: t } : s);
     });
+    socket.on('spectrum-state', (s) => {
+      spectrumState.update(old => {
+        // Reset player-side state when picking phase starts
+        if (old?.phase !== s.phase && s.phase === 'picking') {
+          spectrumSelected = null;
+          spectrumSlider = 50;
+          spectrumSubmitted = false;
+          spectrumDefendChosen = false;
+        }
+        // Reset guess state for each new speaker round
+        if (old?.phase !== s.phase && (s.phase === 'guessing' || s.phase === 'speaker-reveal')) {
+          spectrumGuess = 50;
+          spectrumGuessSubmitted = false;
+        }
+        return s;
+      });
+    });
+    socket.on('spectrum-timer', (t) => {
+      spectrumState.update(s => s ? { ...s, timeLeft: t } : s);
+    });
+    socket.on('spectrum-your-statements', (stmts) => {
+      spectrumStatements = stmts;
+      spectrumSelected = null;
+    });
   });
 
   onDestroy(() => {
@@ -52,6 +85,9 @@
     socket.off('reveal');
     socket.off('debate-state');
     socket.off('debate-timer');
+    socket.off('spectrum-state');
+    socket.off('spectrum-timer');
+    socket.off('spectrum-your-statements');
   });
 
   function join() {
@@ -91,6 +127,31 @@
     const s = seconds % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
   }
+
+  // Spectrum functions
+  function spectrumReroll() {
+    socket.emit('spectrum-reroll');
+  }
+  function spectrumSubmit() {
+    if (spectrumSelected === null || spectrumSubmitted) return;
+    spectrumSubmitted = true;
+    socket.emit('spectrum-submit', {
+      statement: spectrumStatements[spectrumSelected],
+      value: Math.round(spectrumSlider),
+    });
+  }
+  function spectrumDefend(willDefend) {
+    if (spectrumDefendChosen) return;
+    spectrumDefendChosen = true;
+    socket.emit('spectrum-defend', { willDefend });
+  }
+  function spectrumSubmitGuess() {
+    if (spectrumGuessSubmitted) return;
+    spectrumGuessSubmitted = true;
+    socket.emit('spectrum-guess', { value: Math.round(spectrumGuess) });
+  }
+
+  $: isSpeaker = $spectrumState?.currentSpeaker === playerName;
 
   $: isDebater = $debateState?.player1?.name === playerName || $debateState?.player2?.name === playerName;
   $: myDebateRole = $debateState?.player1?.name === playerName ? 'player1' : ($debateState?.player2?.name === playerName ? 'player2' : null);
@@ -321,6 +382,186 @@
           <span>{$debateState.player2?.name}: 👍 {$debateState.thumbsUp?.player2 || 0}</span>
         </div>
       {/if}
+    </div>
+
+  {:else if $phase === 'title3'}
+    <div class="title-screen">
+      <div class="fire-icon">🎯</div>
+      <h2 class="hero-title">THE SPECTRUM</h2>
+      <p class="title-stage">STAGE 3</p>
+      <p class="title-desc">Pick a statement, rate it, and see if anyone can guess your answer!</p>
+    </div>
+
+  {:else if $phase === 'spectrum'}
+    <div class="question-screen">
+      {#if !$spectrumState || $spectrumState.phase === 'title'}
+        <!-- Title screen -->
+        <div class="fire-icon">🎯</div>
+        <h2 class="hero-title sm">THE SPECTRUM</h2>
+        <p class="title-stage">STAGE 3</p>
+        <p class="title-desc">Pick a statement, rate it on a slider, and see if anyone can guess your answer!</p>
+
+      {:else if $spectrumState.phase === 'picking' && !spectrumSubmitted}
+        <!-- PHASE 1: Statement selection + slider -->
+        <h3 class="spectrum-heading">PICK A STATEMENT</h3>
+        <div class="statement-choices">
+          {#each spectrumStatements as stmt, i}
+            <button
+              class="stmt-card"
+              class:stmt-selected={spectrumSelected === i}
+              on:click={() => spectrumSelected = i}
+            >
+              {stmt}
+            </button>
+          {/each}
+        </div>
+        <button class="reroll-btn" on:click={spectrumReroll}>🔀 REROLL</button>
+
+        {#if spectrumSelected !== null}
+          <div class="slider-section">
+            <p class="slider-label">How much do you agree?</p>
+            <div class="slider-track-container">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                bind:value={spectrumSlider}
+                class="spectrum-slider"
+              />
+              <div class="slider-value-display">{Math.round(spectrumSlider)}%</div>
+            </div>
+            <div class="slider-labels">
+              <span>0% DISAGREE</span>
+              <span>100% AGREE</span>
+            </div>
+            <button class="btn-submit-spectrum" on:click={spectrumSubmit}>
+              LOCK IT IN 🔒
+            </button>
+          </div>
+        {/if}
+
+      {:else if $spectrumState.phase === 'picking' && spectrumSubmitted && !spectrumDefendChosen}
+        <!-- PHASE 1: Defend opt-in -->
+        <div class="defend-prompt">
+          <h3 class="spectrum-heading">WANT TO DEFEND THIS?</h3>
+          <p class="defend-desc">If you say YES, you could be picked as the Speaker and everyone guesses YOUR answer.</p>
+          <div class="defend-buttons">
+            <button class="defend-btn defend-yes" on:click={() => spectrumDefend(true)}>
+              YES, I'M IN 🎤
+            </button>
+            <button class="defend-btn defend-no" on:click={() => spectrumDefend(false)}>
+              NO, I'LL WATCH 👀
+            </button>
+          </div>
+        </div>
+
+      {:else if $spectrumState.phase === 'picking' && spectrumSubmitted && spectrumDefendChosen}
+        <!-- PHASE 1: Waiting for host -->
+        <div class="waiting-screen-inner">
+          <div class="fire-icon">✅</div>
+          <h3 class="spectrum-heading">LOCKED IN!</h3>
+          <p class="waiting-text">Waiting for Host...</p>
+          <div class="pulse-ring"></div>
+        </div>
+
+      {:else if $spectrumState.phase === 'speaker-reveal'}
+        <!-- Speaker reveal -->
+        {#if isSpeaker}
+          <div class="speaker-you">
+            <div class="fire-icon">🎤</div>
+            <h3 class="spectrum-heading">YOU ARE THE SPEAKER!</h3>
+            <p class="speaker-you-desc">Watch them sweat.</p>
+          </div>
+        {:else}
+          <h3 class="spectrum-heading">THE SPEAKER</h3>
+          <div class="speaker-reveal-name">{$spectrumState.currentSpeaker}</div>
+          <p class="waiting-text">Get ready to guess...</p>
+        {/if}
+
+      {:else if $spectrumState.phase === 'guessing'}
+        <!-- Guessing phase -->
+        {#if isSpeaker}
+          <div class="speaker-you">
+            <div class="phone-timer" class:timer-danger={$spectrumState.timeLeft <= 30}>
+              <span class="phone-timer-digits">{formatTime($spectrumState.timeLeft)}</span>
+            </div>
+            <h3 class="spectrum-heading">YOU ARE THE SPEAKER!</h3>
+            <p class="speaker-you-desc">Watch them sweat. 😈</p>
+          </div>
+        {:else}
+          <!-- Audience: guess the slider -->
+          <div class="phone-timer" class:timer-danger={$spectrumState.timeLeft <= 30}>
+            <span class="phone-timer-digits">{formatTime($spectrumState.timeLeft)}</span>
+          </div>
+          <div class="guess-statement">
+            <p class="guess-stmt-text">"{$spectrumState.currentStatement}"</p>
+          </div>
+          <p class="guess-prompt">Where did <strong>{$spectrumState.currentSpeaker}</strong> place their slider?</p>
+          {#if !spectrumGuessSubmitted}
+            <div class="slider-section">
+              <div class="slider-track-container">
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="1"
+                  bind:value={spectrumGuess}
+                  class="spectrum-slider"
+                />
+                <div class="slider-value-display">{Math.round(spectrumGuess)}%</div>
+              </div>
+              <div class="slider-labels">
+                <span>0% DISAGREE</span>
+                <span>100% AGREE</span>
+              </div>
+              <button class="btn-submit-spectrum" on:click={spectrumSubmitGuess}>
+                SUBMIT GUESS 🎯
+              </button>
+            </div>
+          {:else}
+            <div class="guess-locked">
+              <span class="guess-locked-value">{Math.round(spectrumGuess)}%</span>
+              <span class="guess-locked-label">GUESS LOCKED IN ✓</span>
+            </div>
+          {/if}
+        {/if}
+
+      {:else if $spectrumState.phase === 'results'}
+        <!-- Results on phone -->
+        <h3 class="spectrum-heading">THE ANSWER</h3>
+        <div class="result-answer-badge">{$spectrumState.speakerValue}%</div>
+        {#if $spectrumState.scores && $spectrumState.scores[playerName]}
+          <div class="my-result">
+            <span class="my-result-label">Your guess: {$spectrumState.scores[playerName].guess}%</span>
+            <span class="my-result-dist">{$spectrumState.scores[playerName].distance}% off</span>
+            <span class="my-result-pts">+{$spectrumState.scores[playerName].points} PTS</span>
+            {#if $spectrumState.scores[playerName].perfect}
+              <span class="perfect-badge">👑 PERFECT MATCH!</span>
+            {/if}
+          </div>
+        {:else if isSpeaker}
+          <p class="speaker-you-desc">You were the Speaker this round!</p>
+        {:else}
+          <p class="waiting-text">No guess submitted</p>
+        {/if}
+
+      {:else if $spectrumState.phase === 'done'}
+        <div class="fire-icon">🎯</div>
+        <h3 class="spectrum-heading">ALL SPEAKERS DONE!</h3>
+        <p class="waiting-text">Waiting for final scores...</p>
+      {/if}
+    </div>
+
+  {:else if $phase === 'gameover'}
+    <div class="score-screen">
+      <div class="fire-icon">🏆</div>
+      <h2 class="hero-title sm">GAME OVER</h2>
+      <div class="score-circle final">
+        <span class="my-score">{$myScore}</span>
+        <span class="pts-label">PTS</span>
+      </div>
+      <p class="thanks">Thanks for playing!</p>
     </div>
 
   {/if}
@@ -772,6 +1013,300 @@
     margin-top: 0.5rem;
   }
 
+  /* ── Spectrum Phone Styles ── */
+  .spectrum-heading {
+    font-family: var(--font-hero);
+    font-size: 2rem;
+    color: var(--accent-yellow);
+    text-shadow: 2px 2px 0 var(--charcoal);
+    margin-bottom: 1rem;
+    line-height: 1.1;
+  }
+  .statement-choices {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin-bottom: 0.75rem;
+  }
+  .stmt-card {
+    background: rgba(0, 0, 0, 0.3);
+    border: 3px solid var(--charcoal);
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--cream);
+    text-align: left;
+    cursor: pointer;
+    line-height: 1.3;
+    box-shadow: 3px 3px 0 var(--charcoal);
+    transition: transform 0.1s, box-shadow 0.1s, border-color 0.15s, background 0.15s;
+  }
+  .stmt-card:active {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0 var(--charcoal);
+  }
+  .stmt-card.stmt-selected {
+    border-color: var(--accent-yellow);
+    background: rgba(242, 183, 5, 0.15);
+    box-shadow: 0 0 12px rgba(242, 183, 5, 0.2);
+  }
+  .reroll-btn {
+    background: transparent;
+    color: var(--cream-dim);
+    border: 2px solid var(--cream-dim);
+    padding: 0.5rem 1.5rem;
+    border-radius: 8px;
+    font-family: var(--font-hero);
+    font-size: 1rem;
+    cursor: pointer;
+    margin-bottom: 1rem;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .reroll-btn:hover {
+    color: var(--cream);
+    border-color: var(--cream);
+  }
+  .reroll-btn:active {
+    transform: translate(1px, 1px);
+  }
+  .slider-section {
+    margin-top: 1rem;
+  }
+  .slider-label {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--cream);
+    margin-bottom: 0.5rem;
+  }
+  .slider-track-container {
+    position: relative;
+    padding: 0.5rem 0;
+  }
+  .spectrum-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 16px;
+    border-radius: 8px;
+    background: linear-gradient(90deg, var(--no-red), var(--accent-yellow), var(--yes-green));
+    outline: none;
+    border: 3px solid var(--charcoal);
+  }
+  .spectrum-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--cream);
+    border: 4px solid var(--charcoal);
+    cursor: pointer;
+    box-shadow: 2px 2px 0 var(--charcoal);
+  }
+  .spectrum-slider::-moz-range-thumb {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--cream);
+    border: 4px solid var(--charcoal);
+    cursor: pointer;
+    box-shadow: 2px 2px 0 var(--charcoal);
+  }
+  .slider-value-display {
+    font-family: var(--font-hero);
+    font-size: 2.5rem;
+    color: var(--accent-yellow);
+    text-shadow: 2px 2px 0 var(--charcoal);
+    margin-top: 0.25rem;
+  }
+  .slider-labels {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-body);
+    font-size: 0.7rem;
+    color: var(--cream-dim);
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    margin-top: 0.25rem;
+    margin-bottom: 0.75rem;
+  }
+  .btn-submit-spectrum {
+    background: var(--accent-orange);
+    color: var(--cream);
+    border: 4px solid var(--charcoal);
+    padding: 1.2rem 2rem;
+    border-radius: 12px;
+    font-family: var(--font-hero);
+    font-size: 1.4rem;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    box-shadow: 5px 5px 0 var(--charcoal);
+    transition: transform 0.1s, box-shadow 0.1s;
+    width: 100%;
+    text-shadow: 1px 1px 0 var(--charcoal);
+  }
+  .btn-submit-spectrum:active {
+    transform: translate(3px, 3px);
+    box-shadow: 2px 2px 0 var(--charcoal);
+  }
+
+  /* Defend prompt */
+  .defend-prompt { text-align: center; }
+  .defend-desc {
+    font-family: var(--font-comic);
+    font-size: 1rem;
+    color: var(--cream-dim);
+    margin-bottom: 1.2rem;
+    line-height: 1.4;
+  }
+  .defend-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+  .defend-btn {
+    padding: 1.5rem;
+    border: 4px solid var(--charcoal);
+    border-radius: 12px;
+    font-family: var(--font-hero);
+    font-size: 1.5rem;
+    cursor: pointer;
+    box-shadow: 5px 5px 0 var(--charcoal);
+    transition: transform 0.1s, box-shadow 0.1s;
+    text-shadow: 1px 1px 0 var(--charcoal);
+  }
+  .defend-btn:active {
+    transform: translate(3px, 3px);
+    box-shadow: 2px 2px 0 var(--charcoal);
+  }
+  .defend-yes {
+    background: var(--yes-green);
+    color: var(--cream);
+  }
+  .defend-no {
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--cream-dim);
+    border-color: var(--cream-dim);
+    text-shadow: none;
+  }
+
+  /* Waiting screen inner */
+  .waiting-screen-inner { text-align: center; }
+
+  /* Speaker you */
+  .speaker-you { text-align: center; }
+  .speaker-you-desc {
+    font-family: var(--font-comic);
+    font-size: 1.3rem;
+    color: var(--cream-dim);
+    font-style: italic;
+    margin-top: 0.5rem;
+  }
+  .speaker-reveal-name {
+    font-family: var(--font-hero);
+    font-size: 3rem;
+    color: var(--accent-yellow);
+    text-shadow: 2px 2px 0 var(--charcoal);
+    text-transform: uppercase;
+    animation: pop 0.5s ease-out;
+    margin-bottom: 0.5rem;
+  }
+
+  /* Guessing */
+  .guess-statement {
+    background: rgba(0, 0, 0, 0.3);
+    border: 3px solid var(--charcoal);
+    border-radius: 12px;
+    padding: 1rem;
+    margin: 0.75rem 0;
+  }
+  .guess-stmt-text {
+    font-family: var(--font-comic);
+    font-size: 1.1rem;
+    color: var(--cream);
+    font-style: italic;
+    line-height: 1.3;
+    margin: 0;
+  }
+  .guess-prompt {
+    font-family: var(--font-body);
+    font-size: 1rem;
+    color: var(--cream);
+    margin-bottom: 0.5rem;
+  }
+  .guess-prompt strong {
+    color: var(--accent-yellow);
+  }
+  .guess-locked {
+    background: rgba(45, 147, 108, 0.25);
+    border: 3px solid var(--yes-green);
+    padding: 1.5rem;
+    border-radius: 12px;
+    margin-top: 1rem;
+    text-align: center;
+  }
+  .guess-locked-value {
+    font-family: var(--font-hero);
+    font-size: 3rem;
+    color: var(--accent-yellow);
+    text-shadow: 2px 2px 0 var(--charcoal);
+    display: block;
+  }
+  .guess-locked-label {
+    font-family: var(--font-hero);
+    font-size: 1.2rem;
+    color: var(--yes-green);
+    letter-spacing: 0.1em;
+  }
+
+  /* Results on phone */
+  .result-answer-badge {
+    font-family: var(--font-hero);
+    font-size: 4rem;
+    color: var(--accent-yellow);
+    text-shadow: 3px 3px 0 var(--charcoal);
+    animation: pop 0.5s ease-out;
+    margin: 0.5rem 0;
+  }
+  .my-result {
+    background: rgba(0, 0, 0, 0.3);
+    border: 3px solid var(--charcoal);
+    border-radius: 12px;
+    padding: 1.2rem;
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    text-align: center;
+  }
+  .my-result-label {
+    font-family: var(--font-body);
+    font-size: 1rem;
+    color: var(--cream);
+    font-weight: 700;
+  }
+  .my-result-dist {
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    color: var(--accent-orange);
+    font-weight: 700;
+  }
+  .my-result-pts {
+    font-family: var(--font-hero);
+    font-size: 2rem;
+    color: var(--accent-yellow);
+    text-shadow: 1px 1px 0 var(--charcoal);
+  }
+  .perfect-badge {
+    font-family: var(--font-hero);
+    font-size: 1.3rem;
+    color: var(--accent-yellow);
+    animation: pop 0.5s ease-out;
+  }
+
   /* ── Animations ── */
   @keyframes pulse {
     0%, 100% { transform: scale(1); opacity: 1; }
@@ -781,5 +1316,9 @@
     0% { transform: scale(1) rotate(-2deg); }
     50% { transform: scale(1.05) rotate(1deg); }
     100% { transform: scale(1) rotate(-1deg); }
+  }
+  @keyframes pop {
+    from { transform: scale(0.7); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
   }
 </style>
