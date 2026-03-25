@@ -9,8 +9,9 @@
   let roomCode = '';
 
   onMount(() => {
-    roomCode = window.__PARTY_ROOM_CODE || '';
+    socket.emit('join-host');
 
+    socket.on('room-code', (code) => roomCode = code);
     socket.on('player-list', (list) => players.set(list));
     socket.on('phase', (p) => phase.set(p));
     socket.on('round-data', (data) => roundData.set(data));
@@ -20,6 +21,7 @@
   });
 
   onDestroy(() => {
+    socket.off('room-code');
     socket.off('player-list');
     socket.off('phase');
     socket.off('round-data');
@@ -28,21 +30,10 @@
     socket.off('reveal');
   });
 
-  function startGame() {
-    socket.emit('start-game');
-  }
-
-  function nextRound() {
-    socket.emit('next-round');
-  }
-
-  function showScoreboard() {
-    socket.emit('show-scoreboard');
-  }
-
-  function voteFor(name) {
-    socket.emit('vote', { playerName: name });
-  }
+  function startGame() { socket.emit('start-game'); }
+  function nextRound() { socket.emit('next-round'); }
+  function showScoreboard() { socket.emit('show-scoreboard'); }
+  function voteFor(name) { socket.emit('vote', { playerName: name }); }
 </script>
 
 <div class="host">
@@ -53,7 +44,7 @@
         <span class="label">Room Code</span>
         <span class="code">{roomCode}</span>
       </div>
-      <img src="/api/qr/{roomCode}" alt="QR Code" class="qr" />
+      <img src="/api/qr" alt="QR Code" class="qr" />
       <div class="player-list">
         <h3>Players ({$players.length})</h3>
         {#each $players as name}
@@ -142,11 +133,6 @@
         {/each}
       </div>
     </div>
-
-  {:else if $phase === 'ended'}
-    <div class="ended">
-      <h2>Game ended</h2>
-    </div>
   {/if}
 </div>
 
@@ -158,26 +144,14 @@
     justify-content: center;
     padding: 2rem;
   }
-  .lobby, .round-display, .reveal-screen, .scoreboard-screen, .gameover-screen, .ended {
+  .lobby, .round-display, .reveal-screen, .scoreboard-screen, .gameover-screen {
     text-align: center;
     width: 100%;
     max-width: 600px;
   }
-  .code-display {
-    margin: 1.5rem 0;
-  }
-  .label {
-    display: block;
-    color: #aaa;
-    font-size: 0.9rem;
-    margin-bottom: 0.25rem;
-  }
-  .code {
-    font-size: 4rem;
-    font-weight: 900;
-    letter-spacing: 0.3em;
-    color: #6c5ce7;
-  }
+  .code-display { margin: 1.5rem 0; }
+  .label { display: block; color: #aaa; font-size: 0.9rem; margin-bottom: 0.25rem; }
+  .code { font-size: 4rem; font-weight: 900; letter-spacing: 0.3em; color: #6c5ce7; }
   .qr {
     width: 180px;
     height: 180px;
@@ -230,10 +204,7 @@
     margin: 0.4rem 0;
     font-size: 1.1rem;
   }
-  .score-row.first {
-    background: #6c5ce7;
-    font-weight: 700;
-  }
+  .score-row.first { background: #6c5ce7; font-weight: 700; }
   .answer-list { margin: 1rem 0; }
   .answer-card {
     background: #1a1a2e;

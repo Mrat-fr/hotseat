@@ -1,23 +1,18 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { params } from 'svelte-spa-router';
   import socket from '../lib/socket.js';
   import { phase, roundData, scoreboard, myScore, reveal } from '../lib/store.js';
 
-  let selectedAnswer = null;
-  let textAnswer = '';
-  let submitted = false;
   let playerName = '';
   let joined = false;
   let error = '';
-
-  // Get room code from URL params
-  $: code = $params?.code || '';
+  let selectedAnswer = null;
+  let textAnswer = '';
+  let submitted = false;
 
   onMount(() => {
     socket.on('phase', (p) => {
       phase.set(p);
-      // Reset state on new question
       if (p === 'question') {
         selectedAnswer = null;
         textAnswer = '';
@@ -42,16 +37,10 @@
 
   function join() {
     error = '';
-    if (!playerName.trim()) {
-      error = 'Enter your name';
-      return;
-    }
-    socket.emit('join-room', { code: code.toUpperCase(), name: playerName }, (res) => {
-      if (res.error) {
-        error = res.error;
-      } else {
-        joined = true;
-      }
+    if (!playerName.trim()) { error = 'Enter your name'; return; }
+    socket.emit('join-room', { name: playerName }, (res) => {
+      if (res.error) { error = res.error; }
+      else { joined = true; }
     });
   }
 
@@ -72,8 +61,7 @@
 <div class="phone">
   {#if !joined}
     <div class="join-screen">
-      <h2>Join Game</h2>
-      <p class="room-code">Room: {code}</p>
+      <h2>Party Blitz</h2>
       <input
         type="text"
         bind:value={playerName}
@@ -82,9 +70,7 @@
         class="input"
       />
       <button class="btn" on:click={join}>Join</button>
-      {#if error}
-        <p class="error">{error}</p>
-      {/if}
+      {#if error}<p class="error">{error}</p>{/if}
     </div>
 
   {:else if $phase === 'lobby'}
@@ -107,13 +93,11 @@
               class:selected={selectedAnswer === i}
               class:disabled={submitted}
               on:click={() => submitTrivia(i)}
-            >
-              {opt}
-            </button>
+            >{opt}</button>
           {/each}
         </div>
 
-      {:else if $roundData.type === 'creative'}
+      {:else if $roundData.type === 'creative' || $roundData.type === 'draw'}
         <h3>{$roundData.prompt}</h3>
         <textarea
           bind:value={textAnswer}
@@ -126,48 +110,20 @@
         {:else}
           <p class="submitted-msg">Submitted!</p>
         {/if}
-
-      {:else if $roundData.type === 'draw'}
-        <h3>Draw: {$roundData.prompt}</h3>
-        <textarea
-          bind:value={textAnswer}
-          placeholder="Describe your drawing (canvas coming soon)..."
-          class="text-input"
-          disabled={submitted}
-        ></textarea>
-        {#if !submitted}
-          <button class="btn" on:click={submitText}>Submit</button>
-        {:else}
-          <p class="submitted-msg">Submitted!</p>
-        {/if}
       {/if}
     </div>
 
-  {:else if $phase === 'reveal'}
-    <div class="reveal-screen">
-      <h3>Results are in!</h3>
-      <p>Look at the big screen</p>
-      <div class="my-score">{$myScore} pts</div>
-    </div>
-
-  {:else if $phase === 'scoreboard'}
+  {:else if $phase === 'reveal' || $phase === 'scoreboard'}
     <div class="score-screen">
-      <h3>Scores</h3>
-      <div class="my-score">{$myScore} pts</div>
-      <p>Next round coming up...</p>
+      <div class="my-score">{$myScore}</div>
+      <p>pts</p>
     </div>
 
   {:else if $phase === 'gameover'}
     <div class="gameover-screen">
       <h2>Game Over!</h2>
-      <div class="my-score final">{$myScore} pts</div>
-      <p>Thanks for playing!</p>
-    </div>
-
-  {:else if $phase === 'ended'}
-    <div class="ended-screen">
-      <h2>Host disconnected</h2>
-      <p>The game has ended</p>
+      <div class="my-score final">{$myScore}</div>
+      <p>pts — thanks for playing!</p>
     </div>
   {/if}
 </div>
@@ -180,18 +136,12 @@
     justify-content: center;
     padding: 1.5rem;
   }
-  .join-screen, .waiting-screen, .question-screen, .reveal-screen,
-  .score-screen, .gameover-screen, .ended-screen {
+  .join-screen, .waiting-screen, .question-screen, .score-screen, .gameover-screen {
     text-align: center;
     width: 100%;
     max-width: 400px;
   }
-  .room-code {
-    color: #6c5ce7;
-    font-weight: 700;
-    font-size: 1.2rem;
-    margin: 0.5rem 0 1rem;
-  }
+  h2 { font-size: 1.8rem; margin-bottom: 1.5rem; }
   .input {
     display: block;
     width: 100%;
@@ -227,11 +177,7 @@
     margin-bottom: 1rem;
   }
   h3 { font-size: 1.3rem; margin-bottom: 1.5rem; }
-  .options {
-    display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
-  }
+  .options { display: flex; flex-direction: column; gap: 0.6rem; }
   .option {
     padding: 1rem;
     border: 2px solid #333;
@@ -243,10 +189,7 @@
     transition: all 0.15s;
   }
   .option:hover:not(.disabled) { border-color: #6c5ce7; }
-  .option.selected {
-    background: #6c5ce7;
-    border-color: #6c5ce7;
-  }
+  .option.selected { background: #6c5ce7; border-color: #6c5ce7; }
   .option.disabled { opacity: 0.6; cursor: default; }
   .text-input {
     width: 100%;
@@ -260,18 +203,9 @@
     resize: vertical;
     margin-bottom: 0.75rem;
   }
-  .submitted-msg {
-    color: #00b894;
-    font-weight: 700;
-    font-size: 1.2rem;
-  }
-  .my-score {
-    font-size: 3rem;
-    font-weight: 900;
-    color: #fdcb6e;
-    margin: 1rem 0;
-  }
-  .my-score.final { font-size: 4rem; }
+  .submitted-msg { color: #00b894; font-weight: 700; font-size: 1.2rem; }
+  .my-score { font-size: 4rem; font-weight: 900; color: #fdcb6e; margin: 1rem 0; }
+  .my-score.final { font-size: 5rem; }
   .pulse {
     width: 20px;
     height: 20px;
