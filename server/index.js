@@ -9,7 +9,7 @@ import {
   createRoom, getRoom, addPlayer, removePlayer,
   getPlayerNames, getScoreboard, resetAnswers,
 } from './gameState.js';
-import { getRoundData, scoreTrivia } from './rounds.js';
+import { getRoundData, getYesNoResults } from './rounds.js';
 
 function getLanIP() {
   const nets = os.networkInterfaces();
@@ -41,12 +41,17 @@ app.get('/api/room', (req, res) => {
 
 // QR code endpoint — encodes the player join URL
 app.get('/api/qr', async (req, res) => {
+  const host = req.get('host') || '';
+  const isLocalhost = host.startsWith('localhost') || host.startsWith('127.0.0.1');
   let joinUrl;
-  if (process.env.NODE_ENV === 'production') {
-    joinUrl = `${req.protocol}://${req.get('host')}/#/play`;
+  if (!isLocalhost) {
+    // Real domain (Railway, etc) — use the request host directly
+    joinUrl = `${req.protocol}://${host}/#/play`;
   } else {
+    // Local machine — swap localhost for LAN IP so phones can reach it
     const lanIP = getLanIP();
-    joinUrl = `http://${lanIP}:5173/#/play`;
+    const port = host.split(':')[1] || '80';
+    joinUrl = `http://${lanIP}:${port}/#/play`;
   }
   try {
     const svg = await QRCode.toString(joinUrl, { type: 'svg' });
@@ -106,30 +111,37 @@ io.on('connection', (socket) => {
     startRound();
   });
 
-  // Player submits trivia answer
-  socket.on('trivia-answer', ({ answerIndex }) => {
+  // Player submits yes/no answer
+  socket.on('yesno-answer', ({ answer }) => {
     const room = getRoom(ROOM_CODE);
     if (!room || !currentName || room.phase !== 'question') return;
-    scoreTrivia(room, currentName, answerIndex, room.currentQuestion.correctIndex);
-    const allAnswered = Object.values(room.players).every(p => p.answered);
-    if (allAnswered) revealAnswer();
-  });
-
-  // Player submits creative/draw answer
-  socket.on('submit-answer', ({ answer }) => {
-    const room = getRoom(ROOM_CODE);
-    if (!room || !currentName) return;
     const player = room.players[currentName];
     if (!player || player.answered) return;
     player.answered = true;
-    player.answer = answer;
+    player.answer = answer; // 'yes' or 'no'
+
+    // Broadcast live results to everyone so host screen updates in real-time
+    io.to(ROOM_CODE).emit('yesno-results', getYesNoResults(room));
+
     const allAnswered = Object.values(room.players).every(p => p.answered);
     if (allAnswered) {
-      const answers = Object.entries(room.players).map(([name, p]) => ({ name, answer: p.answer }));
       room.phase = 'reveal';
       io.to(ROOM_CODE).emit('phase', 'reveal');
-      io.to(ROOM_CODE).emit('answers', answers);
     }
+  });
+
+  // Player sends a reason for their yes/no vote
+  socket.on('yesno-reason', ({ reason }) => {
+    if (!currentName || !reason?.trim()) return;
+    const room = getRoom(ROOM_CODE);
+    if (!room) return;
+    const player = room.players[currentName];
+    if (!player || !player.answered) return;
+    io.to(ROOM_CODE).emit('yesno-reason', {
+      name: currentName,
+      answer: player.answer,
+      reason: reason.trim(),
+    });
   });
 
   // Host votes for a player's creative answer
@@ -165,21 +177,11 @@ function startRound() {
   const roundData = getRoundData(room.round);
   room.currentQuestion = roundData;
   room.phase = 'question';
-  const clientData = { ...roundData };
-  delete clientData.correctIndex;
+  // Reset live results and reasons for the new question
+  io.to(ROOM_CODE).emit('yesno-results', { yes: [], no: [] });
+  io.to(ROOM_CODE).emit('yesno-reasons-reset');
   io.to(ROOM_CODE).emit('phase', 'question');
-  io.to(ROOM_CODE).emit('round-data', { round: room.round + 1, total: room.totalRounds, ...clientData });
-}
-
-function revealAnswer() {
-  const room = getRoom(ROOM_CODE);
-  if (!room) return;
-  room.phase = 'reveal';
-  io.to(ROOM_CODE).emit('phase', 'reveal');
-  io.to(ROOM_CODE).emit('reveal', {
-    correctIndex: room.currentQuestion.correctIndex,
-    scoreboard: getScoreboard(ROOM_CODE),
-  });
+  io.to(ROOM_CODE).emit('round-data', { round: room.round + 1, total: room.totalRounds, ...roundData });
 }
 
 const PORT = process.env.PORT || 3000;
