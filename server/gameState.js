@@ -6,7 +6,7 @@ export function createRoom() {
     players: {},
     phase: 'lobby',
     round: 0,
-    totalRounds: 5,
+    totalRounds: 11,
     currentQuestion: null,
     host: null,
   };

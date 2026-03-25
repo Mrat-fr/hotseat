@@ -1,10 +1,8 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import socket from '../lib/socket.js';
-  import { players, phase, roundData, scoreboard, answers, reveal } from '../lib/store.js';
-  import Trivia from './rounds/Trivia.svelte';
-  import Creative from './rounds/Creative.svelte';
-  import Draw from './rounds/Draw.svelte';
+  import { players, phase, roundData, scoreboard, yesnoResults, yesnoReasons } from '../lib/store.js';
+  import YesNo from './rounds/YesNo.svelte';
 
   let roomCode = '';
 
@@ -16,8 +14,12 @@
     socket.on('phase', (p) => phase.set(p));
     socket.on('round-data', (data) => roundData.set(data));
     socket.on('scoreboard', (sb) => scoreboard.set(sb));
-    socket.on('answers', (a) => answers.set(a));
-    socket.on('reveal', (r) => reveal.set(r));
+    socket.on('yesno-results', (r) => yesnoResults.set(r));
+    socket.on('yesno-reason', (r) => yesnoReasons.update(arr => {
+      // assign random float position once on arrival
+      return [...arr, { ...r, x: 5 + Math.random() * 70, y: 5 + Math.random() * 70, dur: 6 + Math.random() * 6, delay: Math.random() * 2 }];
+    }));
+    socket.on('yesno-reasons-reset', () => yesnoReasons.set([]));
   });
 
   onDestroy(() => {
@@ -26,8 +28,9 @@
     socket.off('phase');
     socket.off('round-data');
     socket.off('scoreboard');
-    socket.off('answers');
-    socket.off('reveal');
+    socket.off('yesno-results');
+    socket.off('yesno-reason');
+    socket.off('yesno-reasons-reset');
   });
 
   function startGame() { socket.emit('start-game'); }
@@ -61,42 +64,17 @@
 
   {:else if $phase === 'question'}
     <div class="round-display">
-      {#if $roundData}
-        {#if $roundData.type === 'trivia'}
-          <Trivia data={$roundData} isHost={true} />
-        {:else if $roundData.type === 'creative'}
-          <Creative data={$roundData} isHost={true} />
-        {:else if $roundData.type === 'draw'}
-          <Draw data={$roundData} isHost={true} />
-        {/if}
+      {#if $roundData?.type === 'yesno'}
+        <YesNo data={$roundData} results={$yesnoResults} reasons={$yesnoReasons} />
       {/if}
     </div>
 
   {:else if $phase === 'reveal'}
     <div class="reveal-screen">
-      {#if $roundData?.type === 'trivia' && $reveal}
-        <h2>Answer: {$roundData.options[$reveal.correctIndex]}</h2>
-        <div class="scores">
-          {#each $reveal.scoreboard as entry}
-            <div class="score-row">
-              <span>{entry.name}</span>
-              <span>{entry.score}</span>
-            </div>
-          {/each}
-        </div>
-      {:else if $answers.length > 0}
-        <h2>Answers</h2>
-        <div class="answer-list">
-          {#each $answers as entry}
-            <div class="answer-card">
-              <p class="answer-text">{entry.answer}</p>
-              <span class="answer-name">{entry.name}</span>
-              <button class="btn-vote" on:click={() => voteFor(entry.name)}>+500</button>
-            </div>
-          {/each}
-        </div>
+      {#if $roundData?.type === 'yesno'}
+        <YesNo data={$roundData} results={$yesnoResults} reasons={$yesnoReasons} />
       {/if}
-      <button class="btn-next" on:click={showScoreboard}>Scoreboard</button>
+      <button class="btn-next" on:click={nextRound}>Next Question</button>
     </div>
 
   {:else if $phase === 'scoreboard'}
@@ -205,26 +183,6 @@
     font-size: 1.1rem;
   }
   .score-row.first { background: #6c5ce7; font-weight: 700; }
-  .answer-list { margin: 1rem 0; }
-  .answer-card {
-    background: #1a1a2e;
-    border-radius: 12px;
-    padding: 1rem;
-    margin: 0.5rem 0;
-    text-align: left;
-  }
-  .answer-text { font-size: 1.1rem; margin-bottom: 0.5rem; }
-  .answer-name { color: #aaa; font-size: 0.85rem; }
-  .btn-vote {
-    float: right;
-    background: #fdcb6e;
-    color: #000;
-    border: none;
-    padding: 0.3rem 0.8rem;
-    border-radius: 8px;
-    font-weight: 700;
-    cursor: pointer;
-  }
   .winner { margin: 2rem 0; }
   .trophy { font-size: 4rem; }
 </style>
