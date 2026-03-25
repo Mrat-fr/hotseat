@@ -51,6 +51,11 @@
 </script>
 
 <div class="host">
+  <!-- Skip to Stage 2 (fixed corner button, only during Stage 1 phases) -->
+  {#if $phase === 'lobby' || $phase === 'question' || $phase === 'reveal' || $phase === 'scoreboard'}
+    <button class="btn-skip-stage" on:click={() => skipToStage('debate')}>SKIP TO STAGE 2 →</button>
+  {/if}
+
   <!-- QR icon button (visible during active game) -->
   {#if $phase !== 'lobby'}
     <button class="qr-fab" on:click={() => showQRModal = true} title="Show join QR">
@@ -107,7 +112,6 @@
           🔥 START THE HEAT 🔥
         </button>
       {/if}
-      <button class="btn-skip-stage" on:click={() => skipToStage('debate')}>SKIP TO STAGE 2: DEBATE DUEL →</button>
     </div>
 
   {:else if $phase === 'question'}
@@ -116,7 +120,6 @@
         <YesNo data={$roundData} results={$yesnoResults} reasons={$yesnoReasons} />
       {/if}
       <button class="btn-skip" on:click={nextRound}>SKIP QUESTION →</button>
-      <button class="btn-skip-stage" on:click={() => skipToStage('debate')}>SKIP TO STAGE 2 →</button>
     </div>
 
   {:else if $phase === 'reveal'}
@@ -125,7 +128,6 @@
         <YesNo data={$roundData} results={$yesnoResults} reasons={$yesnoReasons} />
       {/if}
       <button class="btn-action" on:click={nextRound}>NEXT QUESTION →</button>
-      <button class="btn-skip-stage" on:click={() => skipToStage('debate')}>SKIP TO STAGE 2 →</button>
     </div>
 
   {:else if $phase === 'scoreboard'}
@@ -146,7 +148,6 @@
         {/each}
       </div>
       <button class="btn-action" on:click={nextRound}>NEXT ROUND →</button>
-      <button class="btn-skip-stage" on:click={() => skipToStage('debate')}>SKIP TO STAGE 2 →</button>
     </div>
 
   {:else if $phase === 'debate'}
@@ -378,25 +379,28 @@
     box-shadow: 0 0 0 rgba(0,0,0,0.3);
   }
   .btn-skip-stage {
-    background: transparent;
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    background: rgba(0, 0, 0, 0.5);
     color: var(--cream-dim);
-    border: none;
-    padding: 0.4rem 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    padding: 0.4rem 0.8rem;
     font-family: var(--font-body);
-    font-size: 0.8rem;
-    letter-spacing: 0.05em;
+    font-size: 0.7rem;
+    letter-spacing: 0.03em;
     cursor: pointer;
-    margin-top: 1.5rem;
-    opacity: 0.4;
-    transition: opacity 0.15s, color 0.15s;
-    text-decoration: underline;
-    display: block;
-    margin-left: auto;
-    margin-right: auto;
+    opacity: 0.35;
+    transition: opacity 0.15s, background 0.15s;
+    z-index: 50;
+    white-space: nowrap;
   }
   .btn-skip-stage:hover {
     opacity: 1;
+    background: rgba(0, 0, 0, 0.8);
     color: var(--cream);
+    border-color: var(--cream-dim);
   }
 
   /* ── Scoreboard ── */
