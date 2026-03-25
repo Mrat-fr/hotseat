@@ -11,6 +11,9 @@
   let reason = '';
   let reasonSent = false;
 
+  // Stage 1 reasons feed (comments from other players)
+  let reasonsFeed = [];
+
   // Debate state
   let debateOptedIn = false;
 
@@ -31,7 +34,17 @@
         submitted = false;
         reason = '';
         reasonSent = false;
+        reasonsFeed = [];
       }
+    });
+    socket.on('yesno-reason', (r) => {
+      reasonsFeed = [...reasonsFeed, { ...r, thumbedByMe: false }];
+    });
+    socket.on('yesno-thumbsup-update', ({ id, thumbsUp }) => {
+      reasonsFeed = reasonsFeed.map(r => r.id === id ? { ...r, thumbsUp } : r);
+    });
+    socket.on('yesno-reasons-reset', () => {
+      reasonsFeed = [];
     });
     socket.on('round-data', (data) => roundData.set(data));
     socket.on('scoreboard', (sb) => {
@@ -88,6 +101,9 @@
     socket.off('spectrum-state');
     socket.off('spectrum-timer');
     socket.off('spectrum-your-statements');
+    socket.off('yesno-reason');
+    socket.off('yesno-thumbsup-update');
+    socket.off('yesno-reasons-reset');
   });
 
   function join() {
@@ -95,7 +111,11 @@
     if (!playerName.trim()) { error = 'Enter your name'; return; }
     socket.emit('join-room', { name: playerName }, (res) => {
       if (res.error) { error = res.error; }
-      else { joined = true; }
+      else {
+        joined = true;
+        // Restore score immediately (important for reconnecting players)
+        if (res.score) myScore.set(res.score);
+      }
     });
   }
 
@@ -110,6 +130,14 @@
     if (reasonSent || !reason.trim()) return;
     reasonSent = true;
     socket.emit('yesno-reason', { reason });
+  }
+
+  function thumbsUpReason(reasonId) {
+    const r = reasonsFeed.find(r => r.id === reasonId);
+    if (!r || r.thumbedByMe || r.name === playerName) return;
+    r.thumbedByMe = true;
+    reasonsFeed = reasonsFeed;
+    socket.emit('yesno-thumbsup', { reasonId });
   }
 
   function debateOptIn() {
@@ -159,6 +187,14 @@
 </script>
 
 <div class="phone">
+  {#if joined}
+    <div class="score-bar">
+      <span class="score-bar-name">{playerName}</span>
+      <span class="score-bar-divider">·</span>
+      <span class="score-bar-pts">{$myScore}</span>
+      <span class="score-bar-label">PTS</span>
+    </div>
+  {/if}
   {#if !joined}
     <div class="join-screen">
       <div class="fire-icon">🔥</div>
@@ -241,6 +277,28 @@
           {:else}
             <p class="reason-sent">OPINION LAUNCHED!</p>
           {/if}
+          {#if reasonsFeed.filter(r => r.name !== playerName).length > 0}
+            <div class="reasons-feed">
+              <p class="feed-label">HOT TAKES</p>
+              {#each reasonsFeed.filter(r => r.name !== playerName) as r (r.id)}
+                <div class="feed-card" class:feed-yes={r.answer === 'yes'} class:feed-no={r.answer === 'no'}>
+                  <div class="feed-top">
+                    <span class="feed-name">{r.name}</span>
+                    <span class="feed-vote">{r.answer === 'yes' ? 'YES' : 'NO'}</span>
+                  </div>
+                  <p class="feed-reason">"{r.reason}"</p>
+                  <button
+                    class="feed-thumb"
+                    class:feed-thumb-done={r.thumbedByMe}
+                    on:click={() => thumbsUpReason(r.id)}
+                    disabled={r.thumbedByMe}
+                  >
+                    👍 {r.thumbsUp > 0 ? r.thumbsUp : ''}
+                  </button>
+                </div>
+              {/each}
+            </div>
+          {/if}
         {/if}
       {/if}
     </div>
@@ -262,6 +320,28 @@
         </div>
       {:else}
         <p class="reason-sent">OPINION LAUNCHED!</p>
+      {/if}
+      {#if reasonsFeed.filter(r => r.name !== playerName).length > 0}
+        <div class="reasons-feed">
+          <p class="feed-label">HOT TAKES</p>
+          {#each reasonsFeed.filter(r => r.name !== playerName) as r (r.id)}
+            <div class="feed-card" class:feed-yes={r.answer === 'yes'} class:feed-no={r.answer === 'no'}>
+              <div class="feed-top">
+                <span class="feed-name">{r.name}</span>
+                <span class="feed-vote">{r.answer === 'yes' ? 'YES' : 'NO'}</span>
+              </div>
+              <p class="feed-reason">"{r.reason}"</p>
+              <button
+                class="feed-thumb"
+                class:feed-thumb-done={r.thumbedByMe}
+                on:click={() => thumbsUpReason(r.id)}
+                disabled={r.thumbedByMe}
+              >
+                👍 {r.thumbsUp > 0 ? r.thumbsUp : ''}
+              </button>
+            </div>
+          {/each}
+        </div>
       {/if}
     </div>
 
@@ -557,9 +637,26 @@
     <div class="score-screen">
       <div class="fire-icon">🏆</div>
       <h2 class="hero-title sm">GAME OVER</h2>
+      {#if $scoreboard.length > 0 && $scoreboard[0].name === playerName}
+        <p class="winner-me">👑 YOU WON! 👑</p>
+      {:else if $scoreboard.length > 0}
+        <p class="winner-label-phone">Winner: <strong>{$scoreboard[0].name}</strong> — {$scoreboard[0].score} PTS</p>
+      {/if}
       <div class="score-circle final">
         <span class="my-score">{$myScore}</span>
         <span class="pts-label">PTS</span>
+      </div>
+      <p class="total-pts-label">YOUR TOTAL</p>
+      <div class="phone-scoreboard">
+        {#each $scoreboard as entry, i}
+          <div class="phone-score-row" class:phone-first={i === 0} class:phone-me={entry.name === playerName}>
+            <span class="phone-rank">
+              {#if i === 0}👑{:else if i === 1}🥈{:else if i === 2}🥉{:else}#{i + 1}{/if}
+            </span>
+            <span class="phone-sname">{entry.name}</span>
+            <span class="phone-spts">{entry.score}</span>
+          </div>
+        {/each}
       </div>
       <p class="thanks">Thanks for playing!</p>
     </div>
@@ -574,6 +671,52 @@
     align-items: center;
     justify-content: center;
     padding: 1.5rem;
+    padding-top: 3.5rem;
+  }
+
+  /* ── Persistent Score Bar ── */
+  .score-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    padding: 0.4rem 0;
+    background: rgba(0, 0, 0, 0.6);
+    border-bottom: 2px solid var(--accent-yellow);
+    z-index: 100;
+    backdrop-filter: blur(6px);
+  }
+  .score-bar-name {
+    font-family: var(--font-hero);
+    font-size: 0.85rem;
+    color: var(--cream-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .score-bar-divider {
+    color: var(--cream-dim);
+    opacity: 0.4;
+    font-size: 1rem;
+  }
+  .score-bar-pts {
+    font-family: var(--font-hero);
+    font-size: 1.3rem;
+    color: var(--accent-yellow);
+    text-shadow: 1px 1px 0 var(--charcoal);
+  }
+  .score-bar-label {
+    font-family: var(--font-hero);
+    font-size: 0.8rem;
+    color: var(--cream-dim);
+    letter-spacing: 0.15em;
   }
   .join-screen, .waiting-screen, .question-screen, .score-screen, .gameover-screen, .title-screen {
     text-align: center;
@@ -1306,6 +1449,148 @@
     color: var(--accent-yellow);
     animation: pop 0.5s ease-out;
   }
+
+  /* ── Reasons Feed (Stage 1 thumbs-up) ── */
+  .reasons-feed {
+    margin-top: 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .feed-label {
+    font-family: var(--font-hero);
+    font-size: 1rem;
+    color: var(--accent-orange);
+    letter-spacing: 0.15em;
+    margin-bottom: 0.2rem;
+  }
+  .feed-card {
+    background: rgba(0, 0, 0, 0.3);
+    border: 2px solid var(--charcoal);
+    border-radius: 10px;
+    padding: 0.6rem 0.8rem;
+    text-align: left;
+  }
+  .feed-card.feed-yes { border-left: 4px solid var(--yes-green); }
+  .feed-card.feed-no  { border-left: 4px solid var(--no-red); }
+  .feed-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.2rem;
+  }
+  .feed-name {
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--cream-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .feed-vote {
+    font-family: var(--font-hero);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+  }
+  .feed-yes .feed-vote { color: var(--yes-green); }
+  .feed-no .feed-vote  { color: var(--no-red); }
+  .feed-reason {
+    font-family: var(--font-comic);
+    font-size: 0.95rem;
+    color: var(--cream);
+    line-height: 1.3;
+    margin: 0 0 0.4rem 0;
+  }
+  .feed-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border: 2px solid var(--charcoal);
+    border-radius: 6px;
+    padding: 0.3rem 0.8rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+    color: var(--cream);
+    transition: background 0.15s, transform 0.1s;
+  }
+  .feed-thumb:active {
+    transform: scale(0.95);
+  }
+  .feed-thumb-done {
+    background: rgba(45, 147, 108, 0.25);
+    border-color: var(--yes-green);
+    cursor: default;
+  }
+
+  /* ── Phone Game Over Scoreboard ── */
+  .winner-me {
+    font-family: var(--font-hero);
+    font-size: 2rem;
+    color: var(--accent-yellow);
+    text-shadow: 2px 2px 0 var(--charcoal);
+    letter-spacing: 0.1em;
+    animation: pop 0.5s ease-out;
+  }
+  .winner-label-phone {
+    font-family: var(--font-body);
+    font-size: 1rem;
+    color: var(--cream-dim);
+    margin-bottom: 0.25rem;
+  }
+  .winner-label-phone strong {
+    color: var(--accent-yellow);
+  }
+  .total-pts-label {
+    font-family: var(--font-hero);
+    font-size: 0.8rem;
+    color: var(--cream-dim);
+    letter-spacing: 0.2em;
+    margin-top: -0.75rem;
+    margin-bottom: 0.75rem;
+  }
+  .phone-scoreboard {
+    margin: 1rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .phone-score-row {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 0.8rem;
+    background: rgba(0, 0, 0, 0.3);
+    border: 2px solid var(--charcoal);
+    border-radius: 8px;
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--cream);
+  }
+  .phone-score-row.phone-first {
+    background: var(--accent-yellow);
+    color: var(--charcoal);
+    border-color: var(--charcoal);
+    font-weight: 900;
+    box-shadow: 3px 3px 0 var(--charcoal);
+  }
+  .phone-score-row.phone-me:not(.phone-first) {
+    border-color: var(--accent-yellow);
+    background: rgba(242, 183, 5, 0.12);
+  }
+  .phone-rank {
+    min-width: 2rem;
+    text-align: left;
+  }
+  .phone-sname {
+    flex: 1;
+    text-align: left;
+    margin-left: 0.3rem;
+  }
+  .phone-spts {
+    font-family: var(--font-hero);
+    font-size: 1.1rem;
+    letter-spacing: 0.05em;
+  }
+  .phone-first .phone-spts { color: var(--charcoal); }
 
   /* ── Animations ── */
   @keyframes pulse {

@@ -7,7 +7,7 @@ import os from 'os';
 import QRCode from 'qrcode';
 import {
   createRoom, getRoom, addPlayer, removePlayer,
-  getPlayerNames, getScoreboard, resetAnswers,
+  getPlayerNames, getActivePlayerNames, getScoreboard, resetAnswers,
 } from './gameState.js';
 import { getRoundData, getYesNoResults, debateTopics, spectrumStatements } from './rounds.js';
 
@@ -72,7 +72,7 @@ io.on('connection', (socket) => {
     room.host = socket.id;
     socket.join(ROOM_CODE);
     socket.emit('room-code', ROOM_CODE);
-    socket.emit('player-list', getPlayerNames(ROOM_CODE));
+    socket.emit('player-list', getActivePlayerNames(ROOM_CODE));
   });
 
   // Player joins (allowed at any time)
@@ -82,6 +82,8 @@ io.on('connection', (socket) => {
     const result = addPlayer(ROOM_CODE, name);
     if (!result) return callback({ error: 'Name already taken' });
 
+    const isReconnect = room.players[name].score > 0 || false;
+
     // If joining mid-round, mark as answered so they don't block the allAnswered check
     if (room.phase === 'question') {
       room.players[name].answered = true;
@@ -90,8 +92,12 @@ io.on('connection', (socket) => {
     currentName = name;
     socket.playerName = name;
     socket.join(ROOM_CODE);
-    callback({ ok: true });
-    io.to(ROOM_CODE).emit('player-list', getPlayerNames(ROOM_CODE));
+    // Send back their saved score (important for reconnecting players)
+    callback({ ok: true, score: room.players[name].score });
+    io.to(ROOM_CODE).emit('player-list', getActivePlayerNames(ROOM_CODE));
+
+    // Always send the current scoreboard so the player's score bar is correct immediately
+    socket.emit('scoreboard', getScoreboard(ROOM_CODE));
 
     // Sync late joiner to current game state
     if (room.phase !== 'lobby') {
@@ -203,11 +209,45 @@ io.on('connection', (socket) => {
     if (!room) return;
     const player = room.players[currentName];
     if (!player || !player.answered) return;
-    io.to(ROOM_CODE).emit('yesno-reason', {
+    // Store reason on room with an ID so players can thumbs-up it
+    if (!room.reasons) room.reasons = [];
+    const reasonObj = {
+      id: room.reasons.length,
       name: currentName,
       answer: player.answer,
       reason: reason.trim(),
+      thumbsUp: 0,
+      thumbedBy: [],
+    };
+    room.reasons.push(reasonObj);
+    io.to(ROOM_CODE).emit('yesno-reason', {
+      id: reasonObj.id,
+      name: currentName,
+      answer: player.answer,
+      reason: reason.trim(),
+      thumbsUp: 0,
     });
+  });
+
+  // Player thumbs-up a reason in Stage 1 (100 pts — it's just the icebreaker)
+  socket.on('yesno-thumbsup', ({ reasonId }) => {
+    const room = getRoom(ROOM_CODE);
+    if (!room || !currentName || !room.reasons) return;
+    const reasonObj = room.reasons[reasonId];
+    if (!reasonObj) return;
+    // Can't thumbs-up your own comment, and only once per comment
+    if (reasonObj.name === currentName) return;
+    if (reasonObj.thumbedBy.includes(currentName)) return;
+    reasonObj.thumbedBy.push(currentName);
+    reasonObj.thumbsUp++;
+    // Award small points to the comment author
+    const author = room.players[reasonObj.name];
+    if (author) author.score += 100;
+    io.to(ROOM_CODE).emit('yesno-thumbsup-update', {
+      id: reasonId,
+      thumbsUp: reasonObj.thumbsUp,
+    });
+    io.to(ROOM_CODE).emit('scoreboard', getScoreboard(ROOM_CODE));
   });
 
   // Host votes for a player's creative answer
@@ -736,7 +776,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     if (currentName) {
       removePlayer(ROOM_CODE, currentName);
-      io.to(ROOM_CODE).emit('player-list', getPlayerNames(ROOM_CODE));
+      io.to(ROOM_CODE).emit('player-list', getActivePlayerNames(ROOM_CODE));
     }
   });
 });
@@ -745,6 +785,7 @@ function startRound() {
   const room = getRoom(ROOM_CODE);
   if (!room) return;
   resetAnswers(ROOM_CODE);
+  room.reasons = [];
   const roundData = getRoundData(room.round);
   room.currentQuestion = roundData;
   room.phase = 'question';

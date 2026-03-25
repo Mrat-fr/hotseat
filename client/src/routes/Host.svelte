@@ -240,17 +240,27 @@
         <div class="fire-icon">🏆</div>
         <h1 class="logo">GAME OVER</h1>
       </div>
-      <div class="scores">
+      {#if $scoreboard.length > 0}
+        <div class="winner-card">
+          <div class="dotted-border winner">
+            <span class="winner-label">👑 WINNER 👑</span>
+            <div class="winner-name">{$scoreboard[0].name}</div>
+            <div class="winner-score">{$scoreboard[0].score} PTS</div>
+          </div>
+        </div>
+      {/if}
+      <div class="scores final">
         {#each $scoreboard as entry, i}
           <div class="score-row" class:first={i === 0} class:second={i === 1} class:third={i === 2}>
             <span class="rank">
               {#if i === 0}👑{:else if i === 1}🥈{:else if i === 2}🥉{:else}#{i + 1}{/if}
             </span>
-            <span class="name">{entry.name}</span>
+            <span class="name">{entry.name}{#if entry.disconnected} <span class="disconnected-tag">offline</span>{/if}</span>
             <span class="pts">{entry.score} PTS</span>
           </div>
         {/each}
       </div>
+      <p class="total-pts-note">Total points earned across all stages</p>
     </div>
   {/if}
 </div>
@@ -684,6 +694,28 @@
     font-size: 1.3rem;
     color: var(--cream);
     line-height: 1.5;
+  }
+
+  /* ── Game Over Extras ── */
+  .total-pts-note {
+    font-family: var(--font-comic);
+    font-size: 0.9rem;
+    color: var(--cream-dim);
+    opacity: 0.6;
+    margin-top: 0.5rem;
+    font-style: italic;
+  }
+  .disconnected-tag {
+    font-family: var(--font-body);
+    font-size: 0.65rem;
+    color: var(--cream-dim);
+    background: rgba(255,255,255,0.1);
+    border-radius: 4px;
+    padding: 0.1rem 0.4rem;
+    margin-left: 0.3rem;
+    letter-spacing: 0.05em;
+    vertical-align: middle;
+    opacity: 0.6;
   }
 
   /* ── Animations ── */

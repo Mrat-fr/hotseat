@@ -24,15 +24,31 @@ export function deleteRoom(code) {
 export function addPlayer(code, name) {
   const room = rooms[code];
   if (!room) return null;
-  if (room.players[name]) return null;
-  room.players[name] = { score: 0, answered: false, answer: null };
+  // If the player already exists and is disconnected, let them rejoin (keep score)
+  if (room.players[name]) {
+    if (room.players[name].disconnected) {
+      room.players[name].disconnected = false;
+      return room;
+    }
+    return null; // Name taken by an active player
+  }
+  room.players[name] = { score: 0, answered: false, answer: null, disconnected: false };
   return room;
 }
 
 export function removePlayer(code, name) {
   const room = rooms[code];
-  if (!room) return;
-  delete room.players[name];
+  if (!room || !room.players[name]) return;
+  // Don't delete — mark as disconnected so they can rejoin and keep their score
+  room.players[name].disconnected = true;
+}
+
+export function getActivePlayerNames(code) {
+  const room = rooms[code];
+  if (!room) return [];
+  return Object.entries(room.players)
+    .filter(([, data]) => !data.disconnected)
+    .map(([name]) => name);
 }
 
 export function getPlayerNames(code) {
@@ -44,8 +60,9 @@ export function getPlayerNames(code) {
 export function getScoreboard(code) {
   const room = rooms[code];
   if (!room) return [];
+  // Include all players (even disconnected) so their scores are preserved on the board
   return Object.entries(room.players)
-    .map(([name, data]) => ({ name, score: data.score }))
+    .map(([name, data]) => ({ name, score: data.score, disconnected: !!data.disconnected }))
     .sort((a, b) => b.score - a.score);
 }
 
