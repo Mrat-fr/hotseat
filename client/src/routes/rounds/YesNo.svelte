@@ -34,19 +34,23 @@
     </div>
   </div>
 
-  <!-- Floating speech bubble reasons -->
-  {#each reasons as r}
-    <div
-      class="speech-bubble"
-      class:bubble-yes={r.answer === 'yes'}
-      class:bubble-no={r.answer === 'no'}
-      style="left:{r.x}%; top:{r.y}%; animation-duration:{r.dur}s; animation-delay:{r.delay}s"
-    >
-      <span class="bubble-name">{r.name}</span>
-      <span class="bubble-text">"{r.reason}"</span>
-      <div class="bubble-tail" class:tail-yes={r.answer === 'yes'} class:tail-no={r.answer === 'no'}></div>
+  <!-- Floating speech bubble reasons (contained area so they don't cover buttons) -->
+  {#if reasons.length > 0}
+    <div class="bubbles-container">
+      {#each reasons as r}
+        <div
+          class="speech-bubble"
+          class:bubble-yes={r.answer === 'yes'}
+          class:bubble-no={r.answer === 'no'}
+          style="left:{r.x}%; top:{r.y}%; animation-duration:{r.dur}s; animation-delay:{r.delay}s"
+        >
+          <span class="bubble-name">{r.name}</span>
+          <span class="bubble-text">"{r.reason}"</span>
+          <div class="bubble-tail" class:tail-yes={r.answer === 'yes'} class:tail-no={r.answer === 'no'}></div>
+        </div>
+      {/each}
     </div>
-  {/each}
+  {/if}
 </div>
 
 <style>
@@ -166,9 +170,16 @@
   }
 
   /* ── Speech bubble floating reasons ── */
+  .bubbles-container {
+    position: relative;
+    width: 100%;
+    min-height: 180px;
+    margin-top: 1.5rem;
+    pointer-events: none;
+  }
   .speech-bubble {
-    position: fixed;
-    max-width: 240px;
+    position: absolute;
+    max-width: 220px;
     padding: 0.7rem 1rem;
     border-radius: 16px;
     border: 3px solid var(--charcoal);

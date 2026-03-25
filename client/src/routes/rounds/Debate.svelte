@@ -56,6 +56,9 @@
   function newTopic() {
     socket.emit('debate-new-topic');
   }
+  function startLobby() {
+    socket.emit('debate-start-lobby');
+  }
 
   function formatTime(seconds) {
     const m = Math.floor(seconds / 60);
@@ -65,12 +68,32 @@
 </script>
 
 <div class="debate">
-  {#if !state || state.phase === 'lobby'}
-    <!-- OPT-IN LOBBY (happens first, before topic) -->
+  {#if !state || state.phase === 'title'}
+    <!-- TITLE / HOW TO PLAY SCREEN -->
+    <div class="lobby-view">
+      <div class="hero-sm">
+        <div class="fire-icon-debate">🎤</div>
+        <h1 class="logo">THE HOT MIC DUEL</h1>
+        <p class="tagline">STAGE 2</p>
+      </div>
+      <div class="how-to-play">
+        <h3 class="section-title">HOW TO PLAY</h3>
+        <ul class="how-list">
+          <li>Two players are randomly selected to go head-to-head in a live debate.</li>
+          <li>A topic is chosen from the board and each player gets a side to argue.</li>
+          <li>The audience votes by spamming thumbs-up for their favorite debater.</li>
+          <li>The player with the most thumbs-up wins the round!</li>
+        </ul>
+      </div>
+      <button class="btn-action fire" on:click={startLobby}>🎤 START 🎤</button>
+    </div>
+
+  {:else if state.phase === 'lobby'}
+    <!-- OPT-IN LOBBY -->
     <div class="lobby-view">
       <div class="hero-sm">
         <h2 class="stage-title">STAGE 2</h2>
-        <h1 class="logo">DEBATE DUEL</h1>
+        <h1 class="logo">THE HOT MIC DUEL</h1>
         <p class="tagline">WHO WANTS TO DEBATE?</p>
       </div>
 
@@ -101,12 +124,12 @@
       <h2 class="match-header">THE MATCHUP</h2>
       <div class="matchup simple">
         <div class="debater pro-debater">
-          <span class="debater-side">PRO</span>
+          <span class="debater-side">PLAYER 1</span>
           <span class="debater-name">{state.player1?.name}</span>
         </div>
         <div class="match-vs">VS</div>
         <div class="debater con-debater">
-          <span class="debater-side">CON</span>
+          <span class="debater-side">PLAYER 2</span>
           <span class="debater-name">{state.player2?.name}</span>
         </div>
       </div>
@@ -144,13 +167,13 @@
       <div class="topic-badge">{state.currentTopic?.title}</div>
       <div class="matchup">
         <div class="debater pro-debater">
-          <span class="debater-side">PRO</span>
+          <span class="debater-side">PLAYER 1</span>
           <span class="debater-name">{state.player1?.name}</span>
           <p class="debater-stance">"{state.player1?.stance}"</p>
         </div>
         <div class="match-vs">VS</div>
         <div class="debater con-debater">
-          <span class="debater-side">CON</span>
+          <span class="debater-side">PLAYER 2</span>
           <span class="debater-name">{state.player2?.name}</span>
           <p class="debater-stance">"{state.player2?.stance}"</p>
         </div>
@@ -167,20 +190,20 @@
       </div>
       <div class="duel-matchup">
         <div class="duel-side pro-side">
-          <span class="duel-label">PRO</span>
+          <span class="duel-label">PLAYER 1</span>
           <span class="duel-name">{state.player1?.name}</span>
           <p class="duel-stance">"{state.player1?.stance}"</p>
-          <!-- Floating thumbs on PRO side -->
+          <!-- Floating thumbs on Player 1 side -->
           {#each thumbAnims.filter(a => a.side === 'player1') as anim (anim.id)}
             <div class="thumb-float" style="--drift:{anim.xDrift}px">👍</div>
           {/each}
         </div>
         <div class="duel-divider"><span class="duel-vs">VS</span></div>
         <div class="duel-side con-side">
-          <span class="duel-label">CON</span>
+          <span class="duel-label">PLAYER 2</span>
           <span class="duel-name">{state.player2?.name}</span>
           <p class="duel-stance">"{state.player2?.stance}"</p>
-          <!-- Floating thumbs on CON side -->
+          <!-- Floating thumbs on Player 2 side -->
           {#each thumbAnims.filter(a => a.side === 'player2') as anim (anim.id)}
             <div class="thumb-float" style="--drift:{anim.xDrift}px">👍</div>
           {/each}
@@ -202,13 +225,13 @@
       <div class="topic-badge">{state.currentTopic?.title}</div>
       <div class="result-scores">
         <div class="result-card" class:winner-card={state.winner === state.player1?.name}>
-          <span class="result-side">PRO</span>
+          <span class="result-side">PLAYER 1</span>
           <span class="result-name">{state.player1?.name}</span>
           <span class="result-thumbs">👍 {state.thumbsUp?.player1 || 0}</span>
           {#if state.winner === state.player1?.name}<span class="trophy">+1000 PTS</span>{/if}
         </div>
         <div class="result-card" class:winner-card={state.winner === state.player2?.name}>
-          <span class="result-side">CON</span>
+          <span class="result-side">PLAYER 2</span>
           <span class="result-name">{state.player2?.name}</span>
           <span class="result-thumbs">👍 {state.thumbsUp?.player2 || 0}</span>
           {#if state.winner === state.player2?.name}<span class="trophy">+1000 PTS</span>{/if}
@@ -326,6 +349,44 @@
     letter-spacing: 0.1em;
     color: var(--accent-yellow);
     margin-bottom: 1.5rem;
+  }
+
+  /* ── Title / How to Play ── */
+  .fire-icon-debate {
+    font-size: 3.5rem;
+    filter: drop-shadow(0 0 12px rgba(232, 93, 38, 0.6));
+    animation: pop 0.5s ease-out;
+  }
+  .how-to-play {
+    margin: 1.5rem auto;
+    max-width: 500px;
+    text-align: left;
+    background: rgba(0, 0, 0, 0.2);
+    border: 3px dashed var(--accent-orange);
+    border-radius: 16px;
+    padding: 1.5rem;
+  }
+  .how-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .how-list li {
+    font-family: var(--font-comic);
+    font-size: 1rem;
+    color: var(--cream);
+    line-height: 1.4;
+    padding-left: 1.5rem;
+    position: relative;
+  }
+  .how-list li::before {
+    content: '🔥';
+    position: absolute;
+    left: 0;
+    font-size: 0.85rem;
   }
 
   /* ── Lobby / Opt-in ── */

@@ -124,6 +124,30 @@
       <div class="pulse-ring"></div>
     </div>
 
+  {:else if $phase === 'waiting'}
+    <div class="waiting-screen">
+      <div class="fire-icon">🔥</div>
+      <h2 class="hero-title sm">YOU'RE IN!</h2>
+      <p class="waiting-text">Waiting on host to start the next round...</p>
+      <div class="pulse-ring"></div>
+    </div>
+
+  {:else if $phase === 'title1'}
+    <div class="title-screen">
+      <div class="fire-icon">🔥</div>
+      <h2 class="hero-title">FANNING THE FLAMES</h2>
+      <p class="title-stage">STAGE 1</p>
+      <p class="title-desc">A series of hot-take YES or NO questions. Pick your side and defend your opinion!</p>
+    </div>
+
+  {:else if $phase === 'title2'}
+    <div class="title-screen">
+      <div class="fire-icon">🎤</div>
+      <h2 class="hero-title">THE HOT MIC DUEL</h2>
+      <p class="title-stage">STAGE 2</p>
+      <p class="title-desc">Two players go head-to-head in a live debate! The audience votes with thumbs-up to crown the winner.</p>
+    </div>
+
   {:else if $phase === 'question' && $roundData}
     <div class="question-screen">
       <div class="round-badge">ROUND {$roundData.round}/{$roundData.total}</div>
@@ -190,10 +214,17 @@
 
   {:else if $phase === 'debate'}
     <div class="question-screen">
-      {#if !$debateState || $debateState.phase === 'lobby'}
+      {#if !$debateState || $debateState.phase === 'title'}
+        <!-- Title screen -->
+        <div class="fire-icon">🎤</div>
+        <h2 class="hero-title sm">THE HOT MIC DUEL</h2>
+        <p class="title-stage">STAGE 2</p>
+        <p class="title-desc">Two players debate head-to-head while the audience votes with thumbs-up!</p>
+
+      {:else if $debateState.phase === 'lobby'}
         <!-- Opt-in screen (before topic is picked) -->
         <div class="fire-icon">🔥</div>
-        <h2 class="hero-title sm">DEBATE DUEL</h2>
+        <h2 class="hero-title sm">THE HOT MIC DUEL</h2>
         <p class="debate-prompt">Ready to Debate? Check the box to enter the raffle!</p>
         {#if !debateOptedIn}
           <button class="debate-optin-btn" on:click={debateOptIn}>
@@ -209,7 +240,7 @@
       {:else if $debateState.phase === 'grid'}
         <!-- Host is picking a topic -->
         <div class="fire-icon">🔥</div>
-        <h2 class="hero-title sm">DEBATE DUEL</h2>
+        <h2 class="hero-title sm">THE HOT MIC DUEL</h2>
         <div class="debate-opted">
           <span class="checkbox-icon checked">[x]</span> YOU'RE IN!
         </div>
@@ -221,12 +252,12 @@
         <h3 class="debate-heading">THE MATCHUP</h3>
         {#if isDebater}
           <div class="stance-reveal" class:pro-bg={myDebateRole === 'player1'} class:con-bg={myDebateRole === 'player2'}>
-            <span class="stance-side">{myStance?.side}</span>
+            <span class="stance-side">{myDebateRole === 'player1' ? 'PLAYER 1' : 'PLAYER 2'}</span>
             <p class="stance-big">You're debating!</p>
           </div>
           <p class="waiting-text">Host is picking a topic...</p>
         {:else}
-          <p class="debate-info">{$debateState.player1?.name} (PRO) vs {$debateState.player2?.name} (CON)</p>
+          <p class="debate-info">{$debateState.player1?.name} vs {$debateState.player2?.name}</p>
           <p class="waiting-text">Host is picking a topic...</p>
         {/if}
 
@@ -242,11 +273,11 @@
         <div class="topic-badge-phone">{$debateState.currentTopic?.title}</div>
         {#if isDebater}
           <div class="stance-reveal" class:pro-bg={myDebateRole === 'player1'} class:con-bg={myDebateRole === 'player2'}>
-            <span class="stance-side">{myStance?.side}</span>
+            <span class="stance-side">{myDebateRole === 'player1' ? 'PLAYER 1' : 'PLAYER 2'}</span>
             <p class="stance-big">"{myStance?.stance}"</p>
           </div>
         {:else}
-          <p class="debate-info">{$debateState.player1?.name} (PRO) vs {$debateState.player2?.name} (CON)</p>
+          <p class="debate-info">{$debateState.player1?.name} vs {$debateState.player2?.name}</p>
           <p class="waiting-text">Duel is about to begin!</p>
         {/if}
 
@@ -257,7 +288,7 @@
         </div>
         {#if isDebater}
           <div class="stance-reveal compact" class:pro-bg={myDebateRole === 'player1'} class:con-bg={myDebateRole === 'player2'}>
-            <span class="stance-side">{myStance?.side}</span>
+            <span class="stance-side">{myDebateRole === 'player1' ? 'PLAYER 1' : 'PLAYER 2'}</span>
             <p class="stance-big">"{myStance?.stance}"</p>
           </div>
         {:else}
@@ -292,16 +323,6 @@
       {/if}
     </div>
 
-  {:else if $phase === 'gameover'}
-    <div class="gameover-screen">
-      <div class="fire-icon">🔥</div>
-      <h2 class="hero-title sm">GAME OVER</h2>
-      <div class="score-circle final">
-        <span class="my-score">{$myScore}</span>
-        <span class="pts-label">PTS</span>
-      </div>
-      <p class="thanks">Thanks for playing!</p>
-    </div>
   {/if}
 </div>
 
@@ -313,7 +334,7 @@
     justify-content: center;
     padding: 1.5rem;
   }
-  .join-screen, .waiting-screen, .question-screen, .score-screen, .gameover-screen {
+  .join-screen, .waiting-screen, .question-screen, .score-screen, .gameover-screen, .title-screen {
     text-align: center;
     width: 100%;
     max-width: 400px;
@@ -335,6 +356,19 @@
     line-height: 1;
   }
   .hero-title.sm { font-size: 2.5rem; }
+  .title-stage {
+    font-family: var(--font-hero);
+    font-size: 1.1rem;
+    color: var(--accent-orange);
+    letter-spacing: 0.3em;
+    margin-bottom: 1rem;
+  }
+  .title-desc {
+    font-family: var(--font-comic);
+    font-size: 1.1rem;
+    color: var(--cream);
+    line-height: 1.5;
+  }
 
   /* ── Join Form ── */
   .join-form {

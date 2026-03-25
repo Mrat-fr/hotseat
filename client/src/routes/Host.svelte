@@ -43,6 +43,7 @@
   });
 
   function startGame() { socket.emit('start-game'); }
+  function startStage1() { socket.emit('start-stage1'); }
   function nextRound() { socket.emit('next-round'); }
   function showScoreboard() { socket.emit('show-scoreboard'); }
   function voteFor(name) { socket.emit('vote', { playerName: name }); }
@@ -52,7 +53,7 @@
 
 <div class="host">
   <!-- Skip to Stage 2 (fixed corner button, only during Stage 1 phases) -->
-  {#if $phase === 'lobby' || $phase === 'question' || $phase === 'reveal' || $phase === 'scoreboard'}
+  {#if $phase === 'lobby' || $phase === 'title1' || $phase === 'question' || $phase === 'reveal' || $phase === 'scoreboard'}
     <button class="btn-skip-stage" on:click={() => skipToStage('debate')}>SKIP TO STAGE 2 →</button>
   {/if}
 
@@ -112,6 +113,33 @@
           🔥 START THE HEAT 🔥
         </button>
       {/if}
+
+      <div class="rules-card">
+        <div class="dotted-border rules">
+          <span class="rules-label">HOUSE RULES</span>
+          <ul class="rules-list">
+            <li><strong>Keep it Fun:</strong> We're all here to have a good time. Play fair and be a good sport!</li>
+            <li><strong>Watch Your Language:</strong> Please keep the chat clean. No swearing or offensive language.</li>
+            <li><strong>Identity Matters:</strong> Choose a username that is respectful. Avoid anything suggestive, hateful, or inappropriate.</li>
+            <li><strong>Respect Others:</strong> Treat your fellow players the way you'd want to be treated.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  {:else if $phase === 'title1'}
+    <div class="title-screen">
+      <div class="hero">
+        <div class="fire-icon">🔥</div>
+        <h1 class="logo">FANNING THE FLAMES</h1>
+        <p class="tagline">STAGE 1</p>
+      </div>
+      <div class="title-description">
+        <p>A series of hot-take YES or NO questions will appear on screen. Pick your side and defend your opinion!</p>
+      </div>
+      <button class="btn-start" on:click={startStage1}>
+        🔥 START 🔥
+      </button>
     </div>
 
   {:else if $phase === 'question'}
@@ -155,31 +183,19 @@
       <Debate state={$debateState} />
     </div>
 
-  {:else if $phase === 'gameover'}
-    <div class="gameover-screen">
+  {:else if $phase === 'title2'}
+    <div class="title-screen">
       <div class="hero">
-        <div class="fire-icon">🔥</div>
-        <h1 class="logo">GAME OVER</h1>
+        <div class="fire-icon">🎤</div>
+        <h1 class="logo">THE HOT MIC DUEL</h1>
+        <p class="tagline">STAGE 2</p>
       </div>
-      {#if $scoreboard.length > 0}
-        <div class="winner-card">
-          <div class="dotted-border winner">
-            <span class="winner-label">CHAMPION</span>
-            <h2 class="winner-name">{$scoreboard[0].name}</h2>
-            <span class="winner-score">{$scoreboard[0].score} PTS</span>
-          </div>
-        </div>
-      {/if}
-      <div class="scores final">
-        {#each $scoreboard as entry, i}
-          <div class="score-row" class:first={i === 0}>
-            <span class="rank">#{i + 1}</span>
-            <span class="name">{entry.name}</span>
-            <span class="pts">{entry.score} PTS</span>
-          </div>
-        {/each}
+      <div class="title-description">
+        <p>Two players go head-to-head in a live debate! The audience votes with thumbs-up to crown the winner.</p>
       </div>
-      <button class="btn-action" on:click={startDebate}>NEXT STAGE: DEBATE DUEL</button>
+      <button class="btn-start" on:click={startDebate}>
+        🎤 START 🎤
+      </button>
     </div>
   {/if}
 </div>
@@ -190,9 +206,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 2rem;
+    padding: 1rem;
   }
-  .lobby, .round-display, .reveal-screen, .scoreboard-screen, .gameover-screen {
+  .lobby, .round-display, .reveal-screen, .scoreboard-screen, .gameover-screen, .title-screen {
     text-align: center;
     width: 100%;
     max-width: 700px;
@@ -200,17 +216,17 @@
 
   /* ── Hero / Logo ── */
   .hero, .hero-sm {
-    margin-bottom: 2rem;
+    margin-bottom: 1rem;
   }
   .fire-icon {
-    font-size: 4rem;
+    font-size: 3rem;
     filter: drop-shadow(0 0 12px rgba(232, 93, 38, 0.6));
     animation: flicker 1.5s ease-in-out infinite alternate;
   }
   .fire-icon.sm { font-size: 2.5rem; }
   .logo {
     font-family: var(--font-hero);
-    font-size: 5rem;
+    font-size: 4rem;
     color: var(--accent-yellow);
     text-shadow:
       3px 3px 0 var(--charcoal),
@@ -234,13 +250,13 @@
 
   /* ── Join Card ── */
   .join-card {
-    margin: 2rem auto;
+    margin: 1rem auto;
     max-width: 340px;
   }
   .dotted-border {
     border: 3px dashed var(--accent-yellow);
     border-radius: 16px;
-    padding: 1.5rem;
+    padding: 1rem;
     background: rgba(0, 0, 0, 0.25);
     position: relative;
   }
@@ -252,19 +268,19 @@
     display: block;
     margin-bottom: 0.5rem;
   }
-  .code-display { margin: 0.75rem 0; }
+  .code-display { margin: 0.25rem 0; }
   .code {
     font-family: var(--font-hero);
-    font-size: 4.5rem;
+    font-size: 3.5rem;
     font-weight: 900;
     letter-spacing: 0.25em;
     color: var(--accent-yellow);
     text-shadow: 3px 3px 0 var(--charcoal);
   }
   .qr {
-    width: 160px;
-    height: 160px;
-    margin: 0.75rem auto 0;
+    width: 120px;
+    height: 120px;
+    margin: 0.5rem auto 0;
     display: block;
     background: var(--cream);
     padding: 8px;
@@ -273,7 +289,7 @@
   }
 
   /* ── Players ── */
-  .player-list { margin: 2rem 0; }
+  .player-list { margin: 1rem 0; }
   .section-title {
     font-family: var(--font-hero);
     font-size: 1.5rem;
@@ -538,6 +554,55 @@
     opacity: 0.7;
   }
   .join-link:hover { opacity: 1; color: var(--cream); }
+
+  /* ── Rules Card ── */
+  .rules-card {
+    margin: 2rem auto;
+    max-width: 440px;
+  }
+  .dotted-border.rules {
+    border-color: var(--accent-orange);
+    background: rgba(0, 0, 0, 0.2);
+    text-align: left;
+  }
+  .rules-label {
+    font-family: var(--font-hero);
+    font-size: 1.3rem;
+    color: var(--accent-orange);
+    letter-spacing: 0.1em;
+    display: block;
+    text-align: center;
+    margin-bottom: 0.75rem;
+  }
+  .rules-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .rules-list li {
+    font-family: var(--font-comic);
+    font-size: 0.9rem;
+    color: var(--cream);
+    line-height: 1.4;
+  }
+  .rules-list li strong {
+    color: var(--accent-yellow);
+  }
+
+  /* ── Title Screen ── */
+  .title-description {
+    margin: 1.5rem auto;
+    max-width: 500px;
+  }
+  .title-description p {
+    font-family: var(--font-comic);
+    font-size: 1.3rem;
+    color: var(--cream);
+    line-height: 1.5;
+  }
 
   /* ── Animations ── */
   @keyframes pop {

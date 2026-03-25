@@ -94,14 +94,13 @@ io.on('connection', (socket) => {
 
     // Sync late joiner to current game state
     if (room.phase !== 'lobby') {
-      socket.emit('phase', room.phase);
-      if (room.currentQuestion) {
-        socket.emit('round-data', { round: room.round + 1, total: room.totalRounds, ...room.currentQuestion });
-      }
+      // During question/reveal, late joiners see a waiting screen instead of the question
       if (room.phase === 'question' || room.phase === 'reveal') {
-        socket.emit('yesno-results', getYesNoResults(room));
+        socket.emit('phase', 'waiting');
+      } else {
+        socket.emit('phase', room.phase);
       }
-      if (room.phase === 'scoreboard' || room.phase === 'gameover') {
+      if (room.phase === 'scoreboard') {
         socket.emit('scoreboard', getScoreboard(ROOM_CODE));
       }
       if (room.phase === 'debate' && room.debate) {
@@ -122,12 +121,20 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Host starts the game
+  // Host starts the game — show title screen first
   socket.on('start-game', () => {
     const room = getRoom(ROOM_CODE);
     console.log('start-game received', { hasRoom: !!room, socketId: socket.id, host: room?.host, players: Object.keys(room?.players || {}) });
     if (!room || socket.id !== room.host) return;
     if (Object.keys(room.players).length < 1) return;
+    room.phase = 'title1';
+    io.to(ROOM_CODE).emit('phase', 'title1');
+  });
+
+  // Host starts stage 1 rounds (from title screen)
+  socket.on('start-stage1', () => {
+    const room = getRoom(ROOM_CODE);
+    if (!room || socket.id !== room.host) return;
     room.round = 0;
     startRound();
   });
@@ -138,9 +145,8 @@ io.on('connection', (socket) => {
     if (!room || socket.id !== room.host) return;
     room.round++;
     if (room.round >= room.totalRounds) {
-      room.phase = 'gameover';
-      io.to(ROOM_CODE).emit('phase', 'gameover');
-      io.to(ROOM_CODE).emit('scoreboard', getScoreboard(ROOM_CODE));
+      room.phase = 'title2';
+      io.to(ROOM_CODE).emit('phase', 'title2');
       return;
     }
     startRound();
@@ -203,9 +209,9 @@ io.on('connection', (socket) => {
       if (!room || socket.id !== room.host) return;
 
       if (stage === 'debate') {
-        // Jump straight to debate
+        // Jump straight to debate (show title first)
         room.debate = {
-          phase: 'lobby',
+          phase: 'title',
           flipped: [],
           currentTopicIndex: null,
           optedIn: [],
@@ -248,12 +254,12 @@ io.on('connection', (socket) => {
       });
     }
 
-    // Host starts Stage 2
+    // Host starts Stage 2 (show title first)
     socket.on('debate-start', () => {
       const room = getRoom(ROOM_CODE);
       if (!room || socket.id !== room.host) return;
       room.debate = {
-        phase: 'lobby',
+        phase: 'title',
         flipped: [],
         currentTopicIndex: null,
         optedIn: [],
@@ -266,6 +272,14 @@ io.on('connection', (socket) => {
       };
       room.phase = 'debate';
       io.to(ROOM_CODE).emit('phase', 'debate');
+      broadcastDebateState();
+    });
+
+    // Host moves from debate title screen to opt-in lobby
+    socket.on('debate-start-lobby', () => {
+      const room = getRoom(ROOM_CODE);
+      if (!room || socket.id !== room.host || !room.debate) return;
+      room.debate.phase = 'lobby';
       broadcastDebateState();
     });
 
