@@ -8,6 +8,8 @@ import QRCode from 'qrcode';
 import {
   createRoom, getRoom, addPlayer, removePlayer,
   getPlayerNames, getActivePlayerNames, getScoreboard, resetAnswers,
+  createSession, getSession, updateSession, findSessionByName,
+  getActiveAdmin, setActiveAdmin, clearActiveAdmin, isAdminSocket,
 } from './gameState.js';
 import { getRoundData, getYesNoResults, debateTopics, spectrumStatements } from './rounds.js';
 
@@ -29,6 +31,11 @@ const io = new Server(server, { cors: { origin: '*' } });
 // Single room created on startup
 const ROOM_CODE = createRoom();
 console.log(`Room code: ${ROOM_CODE}`);
+
+// Admin secret key — generated once per server instance
+import crypto from 'crypto';
+const ADMIN_KEY = crypto.randomBytes(8).toString('hex');
+console.log(`Admin key: ${ADMIN_KEY}`);
 
 // Serve built Svelte app in production
 const distPath = path.join(__dirname, '..', 'client', 'dist');
@@ -62,6 +69,26 @@ app.get('/api/qr', async (req, res) => {
   }
 });
 
+// Admin QR code endpoint — encodes the admin join URL with secret key
+app.get('/api/admin-qr', async (req, res) => {
+  const host = req.get('host') || '';
+  const isLocalhost = host.startsWith('localhost') || host.startsWith('127.0.0.1');
+  let adminUrl;
+  if (!isLocalhost) {
+    adminUrl = `${req.protocol}://${host}/#/admin?key=${ADMIN_KEY}`;
+  } else {
+    const lanIP = getLanIP();
+    const port = req.get('x-forwarded-port') || host.split(':')[1] || '80';
+    adminUrl = `http://${lanIP}:${port}/#/admin?key=${ADMIN_KEY}`;
+  }
+  try {
+    const svg = await QRCode.toString(adminUrl, { type: 'svg' });
+    res.type('svg').send(svg);
+  } catch {
+    res.status(500).send('QR generation failed');
+  }
+});
+
 // Socket.io
 io.on('connection', (socket) => {
   let currentName = null;
@@ -76,13 +103,21 @@ io.on('connection', (socket) => {
   });
 
   // Player joins (allowed at any time)
-  socket.on('join-room', ({ name }, callback) => {
+  // Supports session-based reconnection: { name, sessionId? }
+  socket.on('join-room', ({ name, sessionId }, callback) => {
     const room = getRoom(ROOM_CODE);
     if (!room) return callback({ error: 'Room not found' });
+
+    // Session-based reconnect: if sessionId provided, try to restore
+    if (sessionId) {
+      const session = getSession(sessionId);
+      if (session && session.name && room.players[session.name]) {
+        name = session.name; // use the session's saved name
+      }
+    }
+
     const result = addPlayer(ROOM_CODE, name);
     if (!result) return callback({ error: 'Name already taken' });
-
-    const isReconnect = room.players[name].score > 0 || false;
 
     // If joining mid-round, mark as answered so they don't block the allAnswered check
     if (room.phase === 'question') {
@@ -92,8 +127,18 @@ io.on('connection', (socket) => {
     currentName = name;
     socket.playerName = name;
     socket.join(ROOM_CODE);
-    // Send back their saved score (important for reconnecting players)
-    callback({ ok: true, score: room.players[name].score });
+
+    // Create or reuse session
+    let sid = sessionId;
+    const existingSession = findSessionByName(name);
+    if (existingSession) {
+      sid = existingSession.id;
+    } else {
+      sid = createSession(name, false);
+    }
+
+    // Send back their saved score + sessionId (important for reconnecting players)
+    callback({ ok: true, score: room.players[name].score, sessionId: sid });
     io.to(ROOM_CODE).emit('player-list', getActivePlayerNames(ROOM_CODE));
 
     // Always send the current scoreboard so the player's score bar is correct immediately
@@ -773,10 +818,320 @@ io.on('connection', (socket) => {
 
     // ── End Stage 3 ──────────────────────────────────────
 
+  // ── Admin Remote Control ──────────────────────────────
+
+  // Admin joins via /admin?key=SECRET on their phone
+  socket.on('join-admin', ({ key, sessionId }, callback) => {
+    if (key !== ADMIN_KEY) return callback({ error: 'Invalid admin key' });
+
+    const admin = getActiveAdmin();
+
+    // Session-based reconnect: if this sessionId matches the active admin, reclaim
+    if (sessionId && admin.sessionId === sessionId) {
+      setActiveAdmin(socket.id, sessionId);
+      socket.isAdmin = true;
+      socket.join(ROOM_CODE);
+      callback({ ok: true, sessionId });
+      sendAdminState(socket);
+      return;
+    }
+
+    // King of the Hill: only one admin at a time
+    if (admin.socketId) {
+      // Check if the current admin socket is still connected
+      const existingSocket = io.sockets.sockets.get(admin.socketId);
+      if (existingSocket) {
+        return callback({ error: 'Admin seat is already taken' });
+      }
+      // Previous admin disconnected — allow takeover
+    }
+
+    const sid = sessionId || createSession('__admin__', true);
+    updateSession(sid, { name: '__admin__', isAdmin: true });
+    setActiveAdmin(socket.id, sid);
+    socket.isAdmin = true;
+    socket.join(ROOM_CODE);
+    callback({ ok: true, sessionId: sid });
+    sendAdminState(socket);
+  });
+
+  // Send current game state to admin
+  function sendAdminState(sock) {
+    const room = getRoom(ROOM_CODE);
+    if (!room) return;
+    sock.emit('admin-state', {
+      phase: room.phase,
+      debatePhase: room.debate?.phase || null,
+      debateOptedInCount: room.debate?.optedIn?.length || 0,
+      spectrumPhase: room.spectrum?.phase || null,
+      players: Object.entries(room.players).map(([name, data]) => ({
+        name, score: data.score, disconnected: data.disconnected,
+      })),
+      reasons: (room.reasons || []).map(r => ({
+        id: r.id, name: r.name, answer: r.answer, reason: r.reason,
+      })),
+    });
+  }
+
+  // Admin kicks a player
+  socket.on('admin-kick', ({ playerName }) => {
+    if (!isAdminSocket(socket.id)) return;
+    const room = getRoom(ROOM_CODE);
+    if (!room || !room.players[playerName]) return;
+
+    // Mark as disconnected and force-disconnect their socket
+    room.players[playerName].disconnected = true;
+    for (const [, sock] of io.of('/').sockets) {
+      if (sock.playerName === playerName) {
+        sock.emit('kicked');
+        sock.disconnect(true);
+      }
+    }
+    io.to(ROOM_CODE).emit('player-list', getActivePlayerNames(ROOM_CODE));
+    // Update admin with new state
+    sendAdminState(socket);
+  });
+
+  // Admin skips to a stage (reuses existing skip logic)
+  socket.on('admin-skip-stage', ({ stage }) => {
+    if (!isAdminSocket(socket.id)) return;
+    const room = getRoom(ROOM_CODE);
+    if (!room) return;
+
+    if (stage === 'debate') {
+      room.debate = {
+        phase: 'title', flipped: [], currentTopicIndex: null,
+        optedIn: [], player1: null, player2: null,
+        thumbsUp: { player1: 0, player2: 0 },
+        timeLeft: 0, timerInterval: null, winner: null,
+      };
+      room.phase = 'debate';
+      io.to(ROOM_CODE).emit('phase', 'debate');
+      const d = room.debate;
+      io.to(ROOM_CODE).emit('debate-state', {
+        phase: d.phase, flipped: d.flipped, currentTopicIndex: null,
+        currentTopic: null, optedIn: d.optedIn, player1: null, player2: null,
+        thumbsUp: d.thumbsUp, timeLeft: 0, winner: null,
+      });
+    }
+    if (stage === 'spectrum') {
+      room.spectrum = {
+        phase: 'title', playerPicks: {}, defendPool: [], usedSpeakers: [],
+        currentSpeaker: null, currentStatement: null, speakerValue: null,
+        guesses: {}, timeLeft: 0, timerInterval: null, roundScores: null,
+        playerStatements: {},
+      };
+      room.phase = 'spectrum';
+      io.to(ROOM_CODE).emit('phase', 'spectrum');
+      broadcastSpectrumState();
+    }
+    if (stage === 'next-round') {
+      room.round++;
+      if (room.round >= room.totalRounds) {
+        room.phase = 'title2';
+        io.to(ROOM_CODE).emit('phase', 'title2');
+      } else {
+        startRound();
+      }
+    }
+    if (stage === 'scoreboard') {
+      room.phase = 'scoreboard';
+      io.to(ROOM_CODE).emit('phase', 'scoreboard');
+      io.to(ROOM_CODE).emit('scoreboard', getScoreboard(ROOM_CODE));
+    }
+    sendAdminState(socket);
+  });
+
+  // Admin removes a text entry (reason) from Stage 1
+  socket.on('admin-remove-reason', ({ reasonId }) => {
+    if (!isAdminSocket(socket.id)) return;
+    const room = getRoom(ROOM_CODE);
+    if (!room || !room.reasons) return;
+    const idx = room.reasons.findIndex(r => r.id === reasonId);
+    if (idx === -1) return;
+    room.reasons.splice(idx, 1);
+    // Tell host to remove the element
+    io.to(ROOM_CODE).emit('remove-reason', { reasonId });
+    sendAdminState(socket);
+  });
+
+  // Admin requests a state refresh
+  socket.on('admin-refresh', () => {
+    if (!isAdminSocket(socket.id)) return;
+    sendAdminState(socket);
+  });
+
+  // Admin "next action" — smart continue based on current phase
+  socket.on('admin-next-action', () => {
+    if (!isAdminSocket(socket.id)) return;
+    const room = getRoom(ROOM_CODE);
+    if (!room) return;
+
+    if (room.phase === 'lobby') {
+      if (Object.keys(room.players).length < 1) return;
+      room.phase = 'title1';
+      io.to(ROOM_CODE).emit('phase', 'title1');
+
+    } else if (room.phase === 'title1') {
+      room.round = 0;
+      startRound();
+
+    } else if (room.phase === 'question' || room.phase === 'reveal' || room.phase === 'scoreboard') {
+      room.round++;
+      if (room.round >= room.totalRounds) {
+        room.phase = 'title2';
+        io.to(ROOM_CODE).emit('phase', 'title2');
+      } else {
+        startRound();
+      }
+
+    } else if (room.phase === 'title2') {
+      room.debate = {
+        phase: 'title', flipped: [], currentTopicIndex: null,
+        optedIn: [], player1: null, player2: null,
+        thumbsUp: { player1: 0, player2: 0 },
+        timeLeft: 0, timerInterval: null, winner: null,
+      };
+      room.phase = 'debate';
+      io.to(ROOM_CODE).emit('phase', 'debate');
+      broadcastDebateState();
+
+    } else if (room.phase === 'debate' && room.debate) {
+      const dp = room.debate.phase;
+      if (dp === 'title') {
+        room.debate.phase = 'lobby';
+        broadcastDebateState();
+      } else if (dp === 'lobby') {
+        if ((room.debate.optedIn?.length || 0) < 2) return;
+        const pool = [...room.debate.optedIn];
+        const i1 = Math.floor(Math.random() * pool.length);
+        const name1 = pool.splice(i1, 1)[0];
+        const i2 = Math.floor(Math.random() * pool.length);
+        room.debate.player1 = { name: name1, stance: null, side: 'PRO' };
+        room.debate.player2 = { name: pool[i2], stance: null, side: 'CON' };
+        room.debate.phase = 'match';
+        broadcastDebateState();
+      } else if (dp === 'match') {
+        if (!room.debate.player1 || !room.debate.player2) return;
+        room.debate.phase = 'grid';
+        broadcastDebateState();
+      } else if (dp === 'armed') {
+        room.debate.phase = 'duel';
+        room.debate.timeLeft = 180;
+        room.debate.thumbsUp = { player1: 0, player2: 0 };
+        broadcastDebateState();
+        if (room.debate.timerInterval) clearInterval(room.debate.timerInterval);
+        room.debate.timerInterval = setInterval(() => {
+          room.debate.timeLeft--;
+          io.to(ROOM_CODE).emit('debate-timer', room.debate.timeLeft);
+          if (room.debate.timeLeft <= 0) {
+            clearInterval(room.debate.timerInterval);
+            room.debate.timerInterval = null;
+            finishDuel(room);
+          }
+        }, 1000);
+      } else if (dp === 'duel') {
+        if (room.debate.timerInterval) {
+          clearInterval(room.debate.timerInterval);
+          room.debate.timerInterval = null;
+        }
+        finishDuel(room);
+      } else if (dp === 'result') {
+        if (room.debate.currentTopicIndex != null && !room.debate.flipped.includes(room.debate.currentTopicIndex)) {
+          room.debate.flipped.push(room.debate.currentTopicIndex);
+        }
+        room.debate.currentTopicIndex = null;
+        room.debate.player1 = null;
+        room.debate.player2 = null;
+        room.debate.thumbsUp = { player1: 0, player2: 0 };
+        room.debate.winner = null;
+        room.debate.optedIn = [];
+        room.debate.phase = 'lobby';
+        if (room.debate.flipped.length >= debateTopics.length) {
+          room.phase = 'gameover';
+          io.to(ROOM_CODE).emit('phase', 'gameover');
+          io.to(ROOM_CODE).emit('scoreboard', getScoreboard(ROOM_CODE));
+        } else {
+          broadcastDebateState();
+        }
+      }
+
+    } else if (room.phase === 'title3') {
+      room.spectrum = {
+        phase: 'title', playerPicks: {}, defendPool: [], usedSpeakers: [],
+        currentSpeaker: null, currentStatement: null, speakerValue: null,
+        guesses: {}, timeLeft: 0, timerInterval: null, roundScores: null, playerStatements: {},
+      };
+      room.phase = 'spectrum';
+      io.to(ROOM_CODE).emit('phase', 'spectrum');
+      broadcastSpectrumState();
+
+    } else if (room.phase === 'spectrum' && room.spectrum) {
+      const sp = room.spectrum.phase;
+      if (sp === 'title') {
+        room.spectrum.phase = 'picking';
+        room.spectrum.playerPicks = {};
+        room.spectrum.defendPool = [];
+        room.spectrum.guesses = {};
+        room.spectrum.currentSpeaker = null;
+        room.spectrum.currentStatement = null;
+        room.spectrum.speakerValue = null;
+        room.spectrum.roundScores = null;
+        room.spectrum.playerStatements = {};
+        for (const name of Object.keys(room.players)) {
+          room.spectrum.playerStatements[name] = pickRandom(spectrumStatements, 4);
+        }
+        broadcastSpectrumState();
+        for (const [, sock] of io.of('/').sockets) {
+          if (sock.playerName && room.spectrum.playerStatements[sock.playerName]) {
+            sock.emit('spectrum-your-statements', room.spectrum.playerStatements[sock.playerName]);
+          }
+        }
+      } else if (sp === 'picking') {
+        pickNextSpeaker(room);
+      } else if (sp === 'speaker-reveal') {
+        const s = room.spectrum;
+        s.phase = 'guessing';
+        s.timeLeft = 180;
+        broadcastSpectrumState();
+        if (s.timerInterval) clearInterval(s.timerInterval);
+        s.timerInterval = setInterval(() => {
+          s.timeLeft--;
+          io.to(ROOM_CODE).emit('spectrum-timer', s.timeLeft);
+          if (s.timeLeft <= 0) {
+            clearInterval(s.timerInterval);
+            s.timerInterval = null;
+            finishSpectrumRound(room);
+          }
+        }, 1000);
+      } else if (sp === 'guessing') {
+        if (room.spectrum.timerInterval) {
+          clearInterval(room.spectrum.timerInterval);
+          room.spectrum.timerInterval = null;
+        }
+        finishSpectrumRound(room);
+      } else if (sp === 'results') {
+        pickNextSpeaker(room);
+      } else if (sp === 'done') {
+        room.phase = 'gameover';
+        io.to(ROOM_CODE).emit('phase', 'gameover');
+        io.to(ROOM_CODE).emit('scoreboard', getScoreboard(ROOM_CODE));
+      }
+    }
+
+    sendAdminState(socket);
+  });
+
+  // ── End Admin ────────────────────────────────────────
+
   socket.on('disconnect', () => {
     if (currentName) {
       removePlayer(ROOM_CODE, currentName);
       io.to(ROOM_CODE).emit('player-list', getActivePlayerNames(ROOM_CODE));
+    }
+    // If admin disconnects, keep the seat reserved (session-based reconnect)
+    if (socket.isAdmin) {
+      // Don't clear — allow session-based reconnect
     }
   });
 });

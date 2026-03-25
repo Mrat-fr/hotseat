@@ -8,6 +8,7 @@
 
   let roomCode = '';
   let showQRModal = false;
+  let showAdminQRModal = false;
   let joinUrl = '';
 
   onMount(() => {
@@ -24,6 +25,9 @@
       return [...arr, { ...r, x: 5 + Math.random() * 70, y: 5 + Math.random() * 70, dur: 6 + Math.random() * 6, delay: Math.random() * 2 }];
     }));
     socket.on('yesno-reasons-reset', () => yesnoReasons.set([]));
+    socket.on('remove-reason', ({ reasonId }) => {
+      yesnoReasons.update(arr => arr.filter(r => r.id !== reasonId));
+    });
     socket.on('debate-state', (s) => debateState.set(s));
     socket.on('debate-timer', (t) => {
       debateState.update(s => s ? { ...s, timeLeft: t } : s);
@@ -43,6 +47,7 @@
     socket.off('yesno-results');
     socket.off('yesno-reason');
     socket.off('yesno-reasons-reset');
+    socket.off('remove-reason');
     socket.off('debate-state');
     socket.off('debate-timer');
     socket.off('spectrum-state');
@@ -75,6 +80,11 @@
     </button>
   {/if}
 
+  <!-- Admin QR button (always visible, top-left under QR fab) -->
+  <button class="admin-fab" on:click={() => showAdminQRModal = true} title="Admin remote QR">
+    🔑
+  </button>
+
   <!-- QR Modal -->
   {#if showQRModal}
     <div class="modal-backdrop" on:click={() => showQRModal = false}>
@@ -84,6 +94,18 @@
         <div class="code-display"><span class="code">{roomCode}</span></div>
         <img src="/api/qr" alt="QR Code" class="qr" />
         <a class="join-link" href={joinUrl} target="_blank">{joinUrl}</a>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Admin QR Modal -->
+  {#if showAdminQRModal}
+    <div class="modal-backdrop" on:click={() => showAdminQRModal = false}>
+      <div class="modal-box" on:click|stopPropagation>
+        <button class="modal-close" on:click={() => showAdminQRModal = false}>✕</button>
+        <span class="join-label admin-label">ADMIN REMOTE</span>
+        <p class="admin-hint">Scan to control the game from your phone</p>
+        <img src="/api/admin-qr" alt="Admin QR Code" class="qr" />
       </div>
     </div>
   {/if}
@@ -101,9 +123,6 @@
         <div class="join-card">
           <div class="dotted-border">
             <span class="join-label">JOIN THE GAME</span>
-            <div class="code-display">
-              <span class="code">{roomCode}</span>
-            </div>
             <img src="/api/qr" alt="QR Code" class="qr" />
             <a class="join-link" href={joinUrl} target="_blank">{joinUrl}</a>
           </div>
@@ -279,24 +298,20 @@
     max-width: 700px;
   }
 
-  /* ── Lobby two-column layout ── */
+  /* ── Lobby layout (centered main, rules pinned right) ── */
   .lobby {
-    display: flex;
-    align-items: flex-start;
-    gap: 2rem;
+    position: relative;
     width: 100%;
-    max-width: 1100px;
+    max-width: 700px;
   }
   .lobby-main {
-    flex: 1;
     text-align: center;
-    min-width: 0;
   }
   .lobby-side {
+    position: absolute;
+    right: -310px;
+    top: 0;
     width: 280px;
-    flex-shrink: 0;
-    position: sticky;
-    top: 1rem;
   }
 
   /* ── Hero / Logo ── */
@@ -336,7 +351,7 @@
   /* ── Join Card ── */
   .join-card {
     margin: 1rem auto;
-    max-width: 300px;
+    max-width: 380px;
   }
   .dotted-border {
     border: 3px dashed var(--accent-yellow);
@@ -363,8 +378,8 @@
     text-shadow: 3px 3px 0 var(--charcoal);
   }
   .qr {
-    width: 220px;
-    height: 220px;
+    width: 300px;
+    height: 300px;
     margin: 0.75rem auto 0;
     display: block;
     background: var(--cream);
@@ -716,6 +731,39 @@
     letter-spacing: 0.05em;
     vertical-align: middle;
     opacity: 0.6;
+  }
+
+  /* ── Admin FAB ── */
+  .admin-fab {
+    position: fixed;
+    top: 4.5rem;
+    left: 1rem;
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 50%;
+    background: var(--charcoal);
+    border: 2px solid var(--accent-orange);
+    font-size: 1rem;
+    cursor: pointer;
+    box-shadow: 2px 2px 0 var(--accent-orange);
+    transition: transform 0.1s, box-shadow 0.1s;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.4;
+  }
+  .admin-fab:hover {
+    opacity: 1;
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 var(--accent-orange);
+  }
+  .admin-label { color: var(--accent-orange) !important; }
+  .admin-hint {
+    font-family: var(--font-comic);
+    font-size: 0.85rem;
+    color: var(--cream-dim);
+    margin: 0.25rem 0 0.75rem;
   }
 
   /* ── Animations ── */

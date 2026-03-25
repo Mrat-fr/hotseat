@@ -43,6 +43,9 @@
     socket.on('yesno-thumbsup-update', ({ id, thumbsUp }) => {
       reasonsFeed = reasonsFeed.map(r => r.id === id ? { ...r, thumbsUp } : r);
     });
+    socket.on('remove-reason', ({ reasonId }) => {
+      reasonsFeed = reasonsFeed.filter(r => r.id !== reasonId);
+    });
     socket.on('yesno-reasons-reset', () => {
       reasonsFeed = [];
     });
@@ -104,6 +107,40 @@
     socket.off('yesno-reason');
     socket.off('yesno-thumbsup-update');
     socket.off('yesno-reasons-reset');
+    socket.off('remove-reason');
+    socket.off('kicked');
+  });
+
+  // On mount, try session-based auto-reconnect
+  let autoReconnectAttempted = false;
+  onMount(() => {
+    const savedSession = localStorage.getItem('hotseat-player-session');
+    const savedName = localStorage.getItem('hotseat-player-name');
+    if (savedSession && savedName) {
+      autoReconnectAttempted = true;
+      playerName = savedName;
+      socket.emit('join-room', { name: savedName, sessionId: savedSession }, (res) => {
+        if (res.error) {
+          // Session expired or name conflict — clear and let user re-enter
+          localStorage.removeItem('hotseat-player-session');
+          localStorage.removeItem('hotseat-player-name');
+          autoReconnectAttempted = false;
+        } else {
+          joined = true;
+          if (res.score) myScore.set(res.score);
+          if (res.sessionId) localStorage.setItem('hotseat-player-session', res.sessionId);
+        }
+      });
+    }
+
+    // Listen for kick
+    socket.on('kicked', () => {
+      joined = false;
+      playerName = '';
+      error = 'You have been kicked by the admin.';
+      localStorage.removeItem('hotseat-player-session');
+      localStorage.removeItem('hotseat-player-name');
+    });
   });
 
   function join() {
@@ -115,6 +152,11 @@
         joined = true;
         // Restore score immediately (important for reconnecting players)
         if (res.score) myScore.set(res.score);
+        // Save session for reconnection
+        if (res.sessionId) {
+          localStorage.setItem('hotseat-player-session', res.sessionId);
+          localStorage.setItem('hotseat-player-name', playerName);
+        }
       }
     });
   }

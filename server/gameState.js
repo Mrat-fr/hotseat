@@ -1,5 +1,68 @@
 const rooms = {};
 
+// ── Session persistence ──────────────────────────────
+// Maps sessionID -> { name, isAdmin }
+const sessions = {};
+
+export function createSession(name, isAdmin = false) {
+  const id = generateSessionId();
+  sessions[id] = { name, isAdmin };
+  return id;
+}
+
+export function getSession(id) {
+  return sessions[id] || null;
+}
+
+export function updateSession(id, data) {
+  if (sessions[id]) Object.assign(sessions[id], data);
+}
+
+export function deleteSession(id) {
+  delete sessions[id];
+}
+
+export function findSessionByName(name) {
+  for (const [id, data] of Object.entries(sessions)) {
+    if (data.name === name) return { id, ...data };
+  }
+  return null;
+}
+
+function generateSessionId() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let id = '';
+  for (let i = 0; i < 24; i++) {
+    id += chars[Math.floor(Math.random() * chars.length)];
+  }
+  if (sessions[id]) return generateSessionId();
+  return id;
+}
+
+// ── Admin state ──────────────────────────────────────
+let activeAdminSocketId = null;
+let activeAdminSessionId = null;
+
+export function getActiveAdmin() {
+  return { socketId: activeAdminSocketId, sessionId: activeAdminSessionId };
+}
+
+export function setActiveAdmin(socketId, sessionId) {
+  activeAdminSocketId = socketId;
+  activeAdminSessionId = sessionId;
+}
+
+export function clearActiveAdmin() {
+  activeAdminSocketId = null;
+  activeAdminSessionId = null;
+}
+
+export function isAdminSocket(socketId) {
+  return activeAdminSocketId === socketId;
+}
+
+// ── Rooms ────────────────────────────────────────────
+
 export function createRoom() {
   const code = generateCode();
   rooms[code] = {
