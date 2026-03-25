@@ -1,0 +1,10 @@
+{
+  "name": "party-blitz-server",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.4",
+    "qrcode": "^1.5.3"
+  }
+}

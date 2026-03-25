@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Vite Dev Server (Svelte)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5173,
+      "cwd": "client"
+    },
+    {
+      "name": "Express + Socket.io Backend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--watch", "index.js"],
+      "port": 3000,
+      "cwd": "server"
+    }
+  ]
+}
