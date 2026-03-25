@@ -16,7 +16,6 @@
     socket.on('scoreboard', (sb) => scoreboard.set(sb));
     socket.on('yesno-results', (r) => yesnoResults.set(r));
     socket.on('yesno-reason', (r) => yesnoReasons.update(arr => {
-      // assign random float position once on arrival
       return [...arr, { ...r, x: 5 + Math.random() * 70, y: 5 + Math.random() * 70, dur: 6 + Math.random() * 6, delay: Math.random() * 2 }];
     }));
     socket.on('yesno-reasons-reset', () => yesnoReasons.set([]));
@@ -42,23 +41,38 @@
 <div class="host">
   {#if $phase === 'lobby'}
     <div class="lobby">
-      <h1>Party Blitz</h1>
-      <div class="code-display">
-        <span class="label">Room Code</span>
-        <span class="code">{roomCode}</span>
+      <!-- Hero / Fire header -->
+      <div class="hero">
+        <div class="fire-icon">🔥</div>
+        <h1 class="logo">THE HOT SEAT</h1>
+        <p class="tagline">SETTLE IT. RIGHT NOW.</p>
       </div>
-      <img src="/api/qr" alt="QR Code" class="qr" />
+
+      <div class="join-card">
+        <div class="dotted-border">
+          <span class="join-label">JOIN THE GAME</span>
+          <div class="code-display">
+            <span class="code">{roomCode}</span>
+          </div>
+          <img src="/api/qr" alt="QR Code" class="qr" />
+        </div>
+      </div>
+
       <div class="player-list">
-        <h3>Players ({$players.length})</h3>
-        {#each $players as name}
-          <div class="player-tag">{name}</div>
-        {/each}
+        <h3 class="section-title">PLAYERS IN THE HOT SEAT ({$players.length})</h3>
+        <div class="player-tags">
+          {#each $players as name}
+            <div class="player-tag">{name}</div>
+          {/each}
+        </div>
         {#if $players.length === 0}
-          <p class="waiting">Waiting for players to join...</p>
+          <p class="waiting">Waiting for brave souls to join...</p>
         {/if}
       </div>
       {#if $players.length >= 1}
-        <button class="btn-start" on:click={startGame}>Start Game</button>
+        <button class="btn-start" on:click={startGame}>
+          🔥 START THE HEAT 🔥
+        </button>
       {/if}
     </div>
 
@@ -74,39 +88,50 @@
       {#if $roundData?.type === 'yesno'}
         <YesNo data={$roundData} results={$yesnoResults} reasons={$yesnoReasons} />
       {/if}
-      <button class="btn-next" on:click={nextRound}>Next Question</button>
+      <button class="btn-action" on:click={nextRound}>NEXT QUESTION →</button>
     </div>
 
   {:else if $phase === 'scoreboard'}
     <div class="scoreboard-screen">
-      <h2>Scoreboard</h2>
+      <div class="hero-sm">
+        <div class="fire-icon sm">🔥</div>
+        <h2 class="logo sm">SCOREBOARD</h2>
+      </div>
       <div class="scores">
         {#each $scoreboard as entry, i}
-          <div class="score-row" class:first={i === 0}>
-            <span class="rank">#{i + 1}</span>
+          <div class="score-row" class:first={i === 0} class:second={i === 1} class:third={i === 2}>
+            <span class="rank">
+              {#if i === 0}👑{:else if i === 1}🥈{:else if i === 2}🥉{:else}#{i + 1}{/if}
+            </span>
             <span class="name">{entry.name}</span>
-            <span class="pts">{entry.score}</span>
+            <span class="pts">{entry.score} PTS</span>
           </div>
         {/each}
       </div>
-      <button class="btn-next" on:click={nextRound}>Next Round</button>
+      <button class="btn-action" on:click={nextRound}>NEXT ROUND →</button>
     </div>
 
   {:else if $phase === 'gameover'}
     <div class="gameover-screen">
-      <h1>Game Over!</h1>
+      <div class="hero">
+        <div class="fire-icon">🔥</div>
+        <h1 class="logo">GAME OVER</h1>
+      </div>
       {#if $scoreboard.length > 0}
-        <div class="winner">
-          <span class="trophy">🏆</span>
-          <h2>{$scoreboard[0].name}</h2>
-          <p>{$scoreboard[0].score} points</p>
+        <div class="winner-card">
+          <div class="dotted-border winner">
+            <span class="winner-label">CHAMPION</span>
+            <h2 class="winner-name">{$scoreboard[0].name}</h2>
+            <span class="winner-score">{$scoreboard[0].score} PTS</span>
+          </div>
         </div>
       {/if}
-      <div class="scores">
+      <div class="scores final">
         {#each $scoreboard as entry, i}
-          <div class="score-row">
-            <span>#{i + 1} {entry.name}</span>
-            <span>{entry.score}</span>
+          <div class="score-row" class:first={i === 0}>
+            <span class="rank">#{i + 1}</span>
+            <span class="name">{entry.name}</span>
+            <span class="pts">{entry.score} PTS</span>
           </div>
         {/each}
       </div>
@@ -125,64 +150,236 @@
   .lobby, .round-display, .reveal-screen, .scoreboard-screen, .gameover-screen {
     text-align: center;
     width: 100%;
-    max-width: 600px;
+    max-width: 700px;
   }
-  .code-display { margin: 1.5rem 0; }
-  .label { display: block; color: #aaa; font-size: 0.9rem; margin-bottom: 0.25rem; }
-  .code { font-size: 4rem; font-weight: 900; letter-spacing: 0.3em; color: #6c5ce7; }
-  .qr {
-    width: 180px;
-    height: 180px;
-    margin: 1rem auto;
+
+  /* ── Hero / Logo ── */
+  .hero, .hero-sm {
+    margin-bottom: 2rem;
+  }
+  .fire-icon {
+    font-size: 4rem;
+    filter: drop-shadow(0 0 12px rgba(232, 93, 38, 0.6));
+    animation: flicker 1.5s ease-in-out infinite alternate;
+  }
+  .fire-icon.sm { font-size: 2.5rem; }
+  .logo {
+    font-family: var(--font-hero);
+    font-size: 5rem;
+    color: var(--accent-yellow);
+    text-shadow:
+      3px 3px 0 var(--charcoal),
+      -1px -1px 0 var(--charcoal),
+      1px -1px 0 var(--charcoal),
+      -1px 1px 0 var(--charcoal),
+      0 6px 0 var(--bg-deep);
+    letter-spacing: 0.05em;
+    line-height: 1;
+  }
+  .logo.sm { font-size: 3rem; }
+  .tagline {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 1.1rem;
+    letter-spacing: 0.3em;
+    color: var(--cream-dim);
+    margin-top: 0.5rem;
+    text-transform: uppercase;
+  }
+
+  /* ── Join Card ── */
+  .join-card {
+    margin: 2rem auto;
+    max-width: 340px;
+  }
+  .dotted-border {
+    border: 3px dashed var(--accent-yellow);
+    border-radius: 16px;
+    padding: 1.5rem;
+    background: rgba(0, 0, 0, 0.25);
+    position: relative;
+  }
+  .join-label {
+    font-family: var(--font-hero);
+    font-size: 1.4rem;
+    color: var(--accent-orange);
+    letter-spacing: 0.1em;
     display: block;
-    background: white;
-    padding: 8px;
-    border-radius: 12px;
+    margin-bottom: 0.5rem;
   }
-  .player-list { margin: 1.5rem 0; }
+  .code-display { margin: 0.75rem 0; }
+  .code {
+    font-family: var(--font-hero);
+    font-size: 4.5rem;
+    font-weight: 900;
+    letter-spacing: 0.25em;
+    color: var(--accent-yellow);
+    text-shadow: 3px 3px 0 var(--charcoal);
+  }
+  .qr {
+    width: 160px;
+    height: 160px;
+    margin: 0.75rem auto 0;
+    display: block;
+    background: var(--cream);
+    padding: 8px;
+    border-radius: 8px;
+    border: 3px solid var(--charcoal);
+  }
+
+  /* ── Players ── */
+  .player-list { margin: 2rem 0; }
+  .section-title {
+    font-family: var(--font-hero);
+    font-size: 1.5rem;
+    color: var(--accent-orange);
+    letter-spacing: 0.08em;
+    margin-bottom: 1rem;
+  }
+  .player-tags {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+  }
   .player-tag {
     display: inline-block;
-    background: #1a1a2e;
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
-    margin: 0.25rem;
-    font-weight: 600;
-  }
-  .waiting { color: #666; font-style: italic; }
-  .btn-start {
-    background: #00b894;
-    color: white;
-    border: none;
-    padding: 1rem 3rem;
-    border-radius: 12px;
-    font-size: 1.3rem;
+    background: var(--charcoal);
+    color: var(--cream);
+    padding: 0.5rem 1.2rem;
+    border-radius: 6px;
+    font-family: var(--font-body);
     font-weight: 700;
-    cursor: pointer;
-    margin-top: 1rem;
-  }
-  .btn-start:hover { background: #00a381; }
-  .btn-next {
-    background: #6c5ce7;
-    color: white;
-    border: none;
-    padding: 0.8rem 2rem;
-    border-radius: 10px;
     font-size: 1rem;
-    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: 2px solid var(--accent-yellow);
+    animation: pop 0.3s ease-out;
+  }
+  .waiting {
+    color: var(--cream-dim);
+    font-style: italic;
+    font-family: var(--font-comic);
+    font-size: 1.1rem;
+  }
+
+  /* ── Buttons ── */
+  .btn-start {
+    background: var(--accent-orange);
+    color: var(--cream);
+    border: 3px solid var(--charcoal);
+    padding: 1rem 3rem;
+    border-radius: 8px;
+    font-family: var(--font-hero);
+    font-size: 1.8rem;
+    letter-spacing: 0.05em;
     cursor: pointer;
     margin-top: 1.5rem;
+    text-shadow: 2px 2px 0 var(--charcoal);
+    box-shadow: 4px 4px 0 var(--charcoal);
+    transition: transform 0.1s, box-shadow 0.1s;
   }
+  .btn-start:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 var(--charcoal);
+  }
+  .btn-start:active {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 var(--charcoal);
+  }
+  .btn-action {
+    background: var(--accent-yellow);
+    color: var(--charcoal);
+    border: 3px solid var(--charcoal);
+    padding: 0.8rem 2.5rem;
+    border-radius: 8px;
+    font-family: var(--font-hero);
+    font-size: 1.4rem;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    margin-top: 2rem;
+    box-shadow: 4px 4px 0 var(--charcoal);
+    transition: transform 0.1s, box-shadow 0.1s;
+  }
+  .btn-action:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 var(--charcoal);
+  }
+  .btn-action:active {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 var(--charcoal);
+  }
+
+  /* ── Scoreboard ── */
   .scores { margin: 1.5rem 0; }
+  .scores.final { margin-top: 2rem; }
   .score-row {
     display: flex;
     justify-content: space-between;
-    padding: 0.75rem 1rem;
-    background: #1a1a2e;
-    border-radius: 10px;
-    margin: 0.4rem 0;
+    align-items: center;
+    padding: 0.8rem 1.2rem;
+    background: rgba(0, 0, 0, 0.3);
+    border: 2px solid var(--charcoal);
+    border-radius: 8px;
+    margin: 0.5rem 0;
+    font-family: var(--font-body);
     font-size: 1.1rem;
+    font-weight: 600;
+    text-transform: uppercase;
   }
-  .score-row.first { background: #6c5ce7; font-weight: 700; }
-  .winner { margin: 2rem 0; }
-  .trophy { font-size: 4rem; }
+  .score-row.first {
+    background: var(--accent-yellow);
+    color: var(--charcoal);
+    border-color: var(--charcoal);
+    font-weight: 900;
+    font-size: 1.3rem;
+    box-shadow: 4px 4px 0 var(--charcoal);
+  }
+  .score-row.second { background: rgba(242, 183, 5, 0.15); border-color: var(--accent-yellow); }
+  .score-row.third { background: rgba(232, 93, 38, 0.15); border-color: var(--accent-orange); }
+  .rank { min-width: 2.5rem; text-align: left; }
+  .name { flex: 1; text-align: left; margin-left: 0.5rem; }
+  .pts { font-family: var(--font-hero); font-size: 1.3rem; letter-spacing: 0.05em; }
+  .score-row.first .pts { color: var(--charcoal); }
+
+  /* ── Winner Card ── */
+  .winner-card {
+    margin: 2rem auto;
+    max-width: 360px;
+  }
+  .dotted-border.winner {
+    border-color: var(--accent-yellow);
+    background: rgba(242, 183, 5, 0.1);
+    text-align: center;
+  }
+  .winner-label {
+    font-family: var(--font-hero);
+    font-size: 1.3rem;
+    color: var(--accent-orange);
+    letter-spacing: 0.2em;
+  }
+  .winner-name {
+    font-family: var(--font-hero);
+    font-size: 3.5rem;
+    color: var(--accent-yellow);
+    text-shadow: 3px 3px 0 var(--charcoal);
+    line-height: 1.1;
+    margin: 0.5rem 0;
+  }
+  .winner-score {
+    font-family: var(--font-hero);
+    font-size: 2rem;
+    color: var(--cream);
+  }
+
+  /* ── Animations ── */
+  @keyframes pop {
+    from { transform: scale(0.7); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
+  }
+  @keyframes flicker {
+    0% { transform: scale(1) rotate(-2deg); }
+    50% { transform: scale(1.05) rotate(1deg); }
+    100% { transform: scale(1) rotate(-1deg); }
+  }
 </style>

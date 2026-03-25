@@ -49,8 +49,9 @@ app.get('/api/qr', async (req, res) => {
     joinUrl = `${req.protocol}://${host}/#/play`;
   } else {
     // Local machine — swap localhost for LAN IP so phones can reach it
+    // x-forwarded-port is set by the Vite dev proxy so phones get the right port
     const lanIP = getLanIP();
-    const port = host.split(':')[1] || '80';
+    const port = req.get('x-forwarded-port') || host.split(':')[1] || '80';
     joinUrl = `http://${lanIP}:${port}/#/play`;
   }
   try {

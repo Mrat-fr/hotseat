@@ -5,12 +5,13 @@
 </script>
 
 <div class="yesno">
-  <div class="round-badge">Round {data.round}/{data.total} — Yes or No</div>
-  <h2>{data.question}</h2>
+  <div class="round-badge">ROUND {data.round}/{data.total} — YES OR NO</div>
+  <h2 class="question">{data.question}</h2>
 
   <div class="split">
     <div class="side yes-side">
       <div class="side-label">YES</div>
+      <div class="side-count">{results.yes.length}</div>
       <div class="names">
         {#each results.yes as name}
           <div class="name-tag yes-tag">{name}</div>
@@ -18,10 +19,13 @@
       </div>
     </div>
 
-    <div class="divider"></div>
+    <div class="divider">
+      <span class="vs">VS</span>
+    </div>
 
     <div class="side no-side">
       <div class="side-label">NO</div>
+      <div class="side-count">{results.no.length}</div>
       <div class="names">
         {#each results.no as name}
           <div class="name-tag no-tag">{name}</div>
@@ -30,114 +34,194 @@
     </div>
   </div>
 
-  <!-- Floating reason messages -->
+  <!-- Floating speech bubble reasons -->
   {#each reasons as r}
     <div
-      class="float-msg"
-      class:float-yes={r.answer === 'yes'}
-      class:float-no={r.answer === 'no'}
+      class="speech-bubble"
+      class:bubble-yes={r.answer === 'yes'}
+      class:bubble-no={r.answer === 'no'}
       style="left:{r.x}%; top:{r.y}%; animation-duration:{r.dur}s; animation-delay:{r.delay}s"
     >
-      <span class="float-name">{r.name}</span>
-      <span class="float-text">"{r.reason}"</span>
+      <span class="bubble-name">{r.name}</span>
+      <span class="bubble-text">"{r.reason}"</span>
+      <div class="bubble-tail" class:tail-yes={r.answer === 'yes'} class:tail-no={r.answer === 'no'}></div>
     </div>
   {/each}
 </div>
 
 <style>
-  .yesno { text-align: center; width: 100%; position: relative; }
+  .yesno {
+    text-align: center;
+    width: 100%;
+    position: relative;
+  }
   .round-badge {
-    background: #6c5ce7;
+    background: var(--charcoal);
+    border: 2px solid var(--accent-yellow);
     display: inline-block;
-    padding: 0.3rem 1rem;
-    border-radius: 20px;
-    font-size: 0.9rem;
-    font-weight: 700;
+    padding: 0.35rem 1.2rem;
+    border-radius: 6px;
+    font-family: var(--font-hero);
+    font-size: 1rem;
+    letter-spacing: 0.1em;
+    color: var(--accent-yellow);
     margin-bottom: 1.5rem;
   }
-  h2 {
+  .question {
+    font-family: var(--font-body);
     font-size: 2rem;
+    font-weight: 900;
     margin-bottom: 2rem;
     max-width: 600px;
     margin-left: auto;
     margin-right: auto;
     line-height: 1.3;
+    color: var(--cream);
+    text-transform: uppercase;
   }
+
+  /* ── Split view ── */
   .split {
     display: flex;
     gap: 0;
-    min-height: 220px;
-    border-radius: 16px;
+    min-height: 240px;
+    border-radius: 12px;
     overflow: hidden;
+    border: 3px solid var(--charcoal);
+    box-shadow: 6px 6px 0 var(--charcoal);
   }
   .side {
     flex: 1;
-    padding: 1.5rem;
+    padding: 1.5rem 1rem;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.6rem;
   }
-  .yes-side { background: rgba(0, 184, 148, 0.15); }
-  .no-side  { background: rgba(255, 107, 107, 0.15); }
-  .divider { width: 2px; background: #333; flex-shrink: 0; }
+  .yes-side { background: rgba(45, 147, 108, 0.2); }
+  .no-side  { background: rgba(214, 64, 69, 0.2); }
+  .divider {
+    width: 4px;
+    background: var(--charcoal);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  .vs {
+    position: absolute;
+    background: var(--charcoal);
+    color: var(--accent-yellow);
+    font-family: var(--font-hero);
+    font-size: 1.2rem;
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    border: 2px solid var(--accent-yellow);
+    z-index: 2;
+  }
   .side-label {
-    font-size: 1.8rem;
-    font-weight: 900;
+    font-family: var(--font-hero);
+    font-size: 2.2rem;
     letter-spacing: 0.1em;
+    text-shadow: 2px 2px 0 var(--charcoal);
   }
-  .yes-side .side-label { color: #00b894; }
-  .no-side  .side-label { color: #ff6b6b; }
+  .yes-side .side-label { color: var(--yes-green); }
+  .no-side  .side-label { color: var(--no-red); }
+  .side-count {
+    font-family: var(--font-hero);
+    font-size: 3rem;
+    line-height: 1;
+    color: var(--cream);
+    text-shadow: 2px 2px 0 var(--charcoal);
+  }
   .names {
     display: flex;
     flex-direction: column;
     gap: 0.4rem;
     width: 100%;
     align-items: center;
+    margin-top: 0.5rem;
   }
   .name-tag {
-    padding: 0.4rem 1rem;
-    border-radius: 20px;
-    font-weight: 600;
-    font-size: 1rem;
-    animation: pop 0.2s ease-out;
+    padding: 0.35rem 1rem;
+    border-radius: 6px;
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: 2px solid var(--charcoal);
+    animation: pop 0.3s ease-out;
   }
-  .yes-tag { background: rgba(0, 184, 148, 0.3); color: #00b894; }
-  .no-tag  { background: rgba(255, 107, 107, 0.3); color: #ff6b6b; }
+  .yes-tag {
+    background: rgba(45, 147, 108, 0.35);
+    color: var(--cream);
+    border-color: var(--yes-green);
+  }
+  .no-tag {
+    background: rgba(214, 64, 69, 0.35);
+    color: var(--cream);
+    border-color: var(--no-red);
+  }
 
-  /* Floating reason messages */
-  .float-msg {
+  /* ── Speech bubble floating reasons ── */
+  .speech-bubble {
     position: fixed;
-    max-width: 220px;
-    padding: 0.6rem 0.9rem;
-    border-radius: 12px;
-    font-size: 0.85rem;
+    max-width: 240px;
+    padding: 0.7rem 1rem;
+    border-radius: 16px;
+    border: 3px solid var(--charcoal);
+    font-family: var(--font-comic);
+    font-size: 0.9rem;
     display: flex;
     flex-direction: column;
-    gap: 0.2rem;
+    gap: 0.15rem;
     pointer-events: none;
-    animation: bob ease-in-out infinite alternate;
+    animation: float ease-in-out infinite alternate;
     z-index: 10;
+    box-shadow: 3px 3px 0 var(--charcoal);
   }
-  .float-yes {
-    background: rgba(0, 184, 148, 0.2);
-    border: 1px solid rgba(0, 184, 148, 0.4);
-    color: #00b894;
+  .bubble-yes {
+    background: var(--yes-green);
+    color: var(--cream);
   }
-  .float-no {
-    background: rgba(255, 107, 107, 0.2);
-    border: 1px solid rgba(255, 107, 107, 0.4);
-    color: #ff6b6b;
+  .bubble-no {
+    background: var(--no-red);
+    color: var(--cream);
   }
-  .float-name { font-weight: 700; font-size: 0.75rem; opacity: 0.8; }
-  .float-text { font-style: italic; line-height: 1.3; }
+  .bubble-name {
+    font-weight: 700;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.85;
+  }
+  .bubble-text {
+    font-style: italic;
+    line-height: 1.3;
+  }
 
-  @keyframes pop {
-    from { transform: scale(0.7); opacity: 0; }
-    to   { transform: scale(1);   opacity: 1; }
+  /* Speech bubble tail */
+  .bubble-tail {
+    position: absolute;
+    bottom: -10px;
+    left: 20px;
+    width: 0;
+    height: 0;
+    border-left: 10px solid transparent;
+    border-right: 4px solid transparent;
   }
-  @keyframes bob {
-    from { transform: translateY(0px) rotate(-1deg); }
-    to   { transform: translateY(-18px) rotate(1deg); }
+  .tail-yes { border-top: 12px solid var(--yes-green); }
+  .tail-no  { border-top: 12px solid var(--no-red); }
+
+  /* ── Animations ── */
+  @keyframes pop {
+    from { transform: scale(0.7) rotate(-3deg); opacity: 0; }
+    to   { transform: scale(1)   rotate(0deg);  opacity: 1; }
+  }
+  @keyframes float {
+    from { transform: translateY(0px) rotate(-2deg); }
+    to   { transform: translateY(-20px) rotate(2deg); }
   }
 </style>

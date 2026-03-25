@@ -13,6 +13,7 @@ export default defineConfig({
       },
       '/api': {
         target: 'http://localhost:3000',
+        headers: { 'x-forwarded-port': '5173' },
       },
     },
   },

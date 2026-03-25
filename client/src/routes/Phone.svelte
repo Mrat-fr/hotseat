@@ -63,35 +63,44 @@
 <div class="phone">
   {#if !joined}
     <div class="join-screen">
-      <h2>Party Blitz</h2>
-      <input
-        type="text"
-        bind:value={playerName}
-        placeholder="Your Name"
-        maxlength="16"
-        class="input"
-      />
-      <button class="btn" on:click={join}>Join</button>
+      <div class="fire-icon">🔥</div>
+      <h2 class="hero-title">THE HOT SEAT</h2>
+      <div class="join-form">
+        <input
+          type="text"
+          bind:value={playerName}
+          placeholder="YOUR NAME"
+          maxlength="16"
+          class="input"
+          on:keydown={(e) => e.key === 'Enter' && join()}
+        />
+        <button class="btn-join" on:click={join}>TAKE A SEAT</button>
+      </div>
       {#if error}<p class="error">{error}</p>{/if}
     </div>
 
   {:else if $phase === 'lobby'}
     <div class="waiting-screen">
-      <h2>You're in!</h2>
-      <p>Waiting for the host to start...</p>
-      <div class="pulse"></div>
+      <div class="fire-icon">🔥</div>
+      <h2 class="hero-title sm">YOU'RE IN!</h2>
+      <p class="waiting-text">The heat is building...</p>
+      <div class="pulse-ring"></div>
     </div>
 
   {:else if $phase === 'question' && $roundData}
     <div class="question-screen">
-      <div class="round-badge">Round {$roundData.round}/{$roundData.total}</div>
+      <div class="round-badge">ROUND {$roundData.round}/{$roundData.total}</div>
 
       {#if $roundData.type === 'yesno'}
-        <h3>{$roundData.question}</h3>
+        <h3 class="question-text">{$roundData.question}</h3>
         {#if !submitted}
           <div class="yesno-buttons">
-            <button class="yesno-btn yes-btn" on:click={() => submitYesNo('yes')}>YES</button>
-            <button class="yesno-btn no-btn"  on:click={() => submitYesNo('no')}>NO</button>
+            <button class="yesno-btn yes-btn" on:click={() => submitYesNo('yes')}>
+              <span class="btn-label">YES</span>
+            </button>
+            <button class="yesno-btn no-btn" on:click={() => submitYesNo('no')}>
+              <span class="btn-label">NO</span>
+            </button>
           </div>
         {:else}
           <div class="voted-msg" class:voted-yes={selectedAnswer === 'yes'} class:voted-no={selectedAnswer === 'no'}>
@@ -101,14 +110,14 @@
             <div class="reason-box">
               <textarea
                 bind:value={reason}
-                placeholder="Why? (optional)"
+                placeholder="Defend yourself... (optional)"
                 maxlength="80"
                 class="reason-input"
               ></textarea>
-              <button class="reason-btn" on:click={sendReason}>Send</button>
+              <button class="reason-btn" on:click={sendReason}>SEND IT 🔥</button>
             </div>
           {:else}
-            <p class="reason-sent">Message sent!</p>
+            <p class="reason-sent">OPINION LAUNCHED!</p>
           {/if}
         {/if}
       {/if}
@@ -123,28 +132,34 @@
         <div class="reason-box">
           <textarea
             bind:value={reason}
-            placeholder="Why? (optional)"
+            placeholder="Defend yourself... (optional)"
             maxlength="80"
             class="reason-input"
           ></textarea>
-          <button class="reason-btn" on:click={sendReason}>Send</button>
+          <button class="reason-btn" on:click={sendReason}>SEND IT 🔥</button>
         </div>
       {:else}
-        <p class="reason-sent">Message sent!</p>
+        <p class="reason-sent">OPINION LAUNCHED!</p>
       {/if}
     </div>
 
   {:else if $phase === 'scoreboard'}
     <div class="score-screen">
-      <div class="my-score">{$myScore}</div>
-      <p>pts</p>
+      <div class="score-circle">
+        <span class="my-score">{$myScore}</span>
+        <span class="pts-label">PTS</span>
+      </div>
     </div>
 
   {:else if $phase === 'gameover'}
     <div class="gameover-screen">
-      <h2>Game Over!</h2>
-      <div class="my-score final">{$myScore}</div>
-      <p>pts — thanks for playing!</p>
+      <div class="fire-icon">🔥</div>
+      <h2 class="hero-title sm">GAME OVER</h2>
+      <div class="score-circle final">
+        <span class="my-score">{$myScore}</span>
+        <span class="pts-label">PTS</span>
+      </div>
+      <p class="thanks">Thanks for playing!</p>
     </div>
   {/if}
 </div>
@@ -162,72 +177,155 @@
     width: 100%;
     max-width: 400px;
   }
-  h2 { font-size: 1.8rem; margin-bottom: 1.5rem; }
+
+  /* ── Hero elements ── */
+  .fire-icon {
+    font-size: 3rem;
+    filter: drop-shadow(0 0 10px rgba(232, 93, 38, 0.5));
+    animation: flicker 1.5s ease-in-out infinite alternate;
+  }
+  .hero-title {
+    font-family: var(--font-hero);
+    font-size: 3rem;
+    color: var(--accent-yellow);
+    text-shadow: 2px 2px 0 var(--charcoal);
+    letter-spacing: 0.05em;
+    margin-bottom: 1.5rem;
+    line-height: 1;
+  }
+  .hero-title.sm { font-size: 2.5rem; }
+
+  /* ── Join Form ── */
+  .join-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
   .input {
     display: block;
     width: 100%;
-    padding: 0.8rem 1rem;
-    border-radius: 10px;
-    border: 2px solid #333;
-    background: #1a1a2e;
-    color: white;
-    font-size: 1rem;
+    padding: 0.9rem 1rem;
+    border-radius: 8px;
+    border: 3px solid var(--charcoal);
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--cream);
+    font-family: var(--font-body);
+    font-size: 1.1rem;
+    font-weight: 700;
     text-align: center;
-    margin-bottom: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
   }
-  .btn {
-    background: #6c5ce7;
-    color: white;
-    border: none;
-    padding: 0.8rem 2rem;
-    border-radius: 10px;
-    font-size: 1rem;
-    font-weight: 700;
+  .input::placeholder {
+    color: var(--cream-dim);
+    opacity: 0.6;
+  }
+  .btn-join {
+    background: var(--accent-orange);
+    color: var(--cream);
+    border: 3px solid var(--charcoal);
+    padding: 0.9rem 2rem;
+    border-radius: 8px;
+    font-family: var(--font-hero);
+    font-size: 1.5rem;
+    letter-spacing: 0.05em;
     cursor: pointer;
-    width: 100%;
+    box-shadow: 4px 4px 0 var(--charcoal);
+    transition: transform 0.1s, box-shadow 0.1s;
   }
-  .btn:hover { background: #5a4bd1; }
-  .error { color: #ff6b6b; margin-top: 0.5rem; }
-  .round-badge {
-    background: #6c5ce7;
-    display: inline-block;
-    padding: 0.3rem 1rem;
-    border-radius: 20px;
-    font-size: 0.85rem;
+  .btn-join:active {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 var(--charcoal);
+  }
+  .error {
+    color: var(--no-red);
     font-weight: 700;
-    margin-bottom: 1rem;
+    margin-top: 0.5rem;
+    font-family: var(--font-body);
   }
-  h3 { font-size: 1.3rem; margin-bottom: 1.5rem; }
+
+  /* ── Waiting ── */
+  .waiting-text {
+    font-family: var(--font-comic);
+    font-size: 1.2rem;
+    color: var(--cream-dim);
+    font-style: italic;
+  }
+  .pulse-ring {
+    width: 24px;
+    height: 24px;
+    background: var(--accent-orange);
+    border-radius: 50%;
+    margin: 2rem auto;
+    border: 3px solid var(--charcoal);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  /* ── Question ── */
+  .round-badge {
+    background: var(--charcoal);
+    border: 2px solid var(--accent-yellow);
+    display: inline-block;
+    padding: 0.3rem 1.2rem;
+    border-radius: 6px;
+    font-family: var(--font-hero);
+    font-size: 1rem;
+    letter-spacing: 0.1em;
+    color: var(--accent-yellow);
+    margin-bottom: 1.2rem;
+  }
+  .question-text {
+    font-family: var(--font-body);
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    line-height: 1.4;
+    color: var(--cream);
+  }
+
+  /* ── Yes/No Buttons ── */
   .yesno-buttons {
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    margin-top: 1.5rem;
+    margin-top: 1rem;
   }
   .yesno-btn {
-    padding: 2rem;
-    border: none;
-    border-radius: 16px;
-    font-size: 2rem;
-    font-weight: 900;
-    letter-spacing: 0.1em;
+    padding: 1.8rem;
+    border: 4px solid var(--charcoal);
+    border-radius: 12px;
+    font-size: 2.2rem;
     cursor: pointer;
-    transition: transform 0.1s;
+    transition: transform 0.1s, box-shadow 0.1s;
+    box-shadow: 5px 5px 0 var(--charcoal);
   }
-  .yesno-btn:active { transform: scale(0.97); }
-  .yes-btn { background: #00b894; color: white; }
-  .no-btn  { background: #ff6b6b; color: white; }
+  .yesno-btn:active {
+    transform: translate(3px, 3px);
+    box-shadow: 2px 2px 0 var(--charcoal);
+  }
+  .btn-label {
+    font-family: var(--font-hero);
+    letter-spacing: 0.15em;
+  }
+  .yes-btn { background: var(--yes-green); color: var(--cream); }
+  .no-btn  { background: var(--no-red); color: var(--cream); }
+
+  /* ── Voted state ── */
   .voted-msg {
-    margin-top: 2rem;
+    margin-top: 1.5rem;
+    font-family: var(--font-hero);
     font-size: 3rem;
-    font-weight: 900;
-    padding: 1.5rem;
-    border-radius: 16px;
+    padding: 1.2rem;
+    border-radius: 12px;
+    border: 3px solid var(--charcoal);
+    text-shadow: 2px 2px 0 var(--charcoal);
   }
-  .voted-yes { background: rgba(0,184,148,0.2); color: #00b894; }
-  .voted-no  { background: rgba(255,107,107,0.2); color: #ff6b6b; }
+  .voted-yes { background: rgba(45, 147, 108, 0.25); color: var(--yes-green); }
+  .voted-no  { background: rgba(214, 64, 69, 0.25); color: var(--no-red); }
+
+  /* ── Reason box ── */
   .reason-box {
-    margin-top: 1rem;
+    margin-top: 1.2rem;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
@@ -235,38 +333,93 @@
   .reason-input {
     width: 100%;
     padding: 0.75rem;
-    border-radius: 10px;
-    border: 2px solid #333;
-    background: #1a1a2e;
-    color: white;
+    border-radius: 8px;
+    border: 3px solid var(--charcoal);
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--cream);
+    font-family: var(--font-comic);
     font-size: 1rem;
     resize: none;
     min-height: 70px;
   }
+  .reason-input::placeholder {
+    color: var(--cream-dim);
+    opacity: 0.5;
+  }
   .reason-btn {
-    background: #6c5ce7;
-    color: white;
-    border: none;
+    background: var(--accent-yellow);
+    color: var(--charcoal);
+    border: 3px solid var(--charcoal);
     padding: 0.7rem;
-    border-radius: 10px;
-    font-size: 1rem;
-    font-weight: 700;
+    border-radius: 8px;
+    font-family: var(--font-hero);
+    font-size: 1.2rem;
+    letter-spacing: 0.05em;
     cursor: pointer;
+    box-shadow: 3px 3px 0 var(--charcoal);
+    transition: transform 0.1s, box-shadow 0.1s;
   }
-  .reason-sent { color: #00b894; font-weight: 600; margin-top: 0.75rem; }
+  .reason-btn:active {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0 var(--charcoal);
+  }
+  .reason-sent {
+    color: var(--accent-yellow);
+    font-family: var(--font-hero);
+    font-size: 1.2rem;
+    letter-spacing: 0.1em;
+    margin-top: 1rem;
+  }
 
-  .my-score { font-size: 4rem; font-weight: 900; color: #fdcb6e; margin: 1rem 0; }
-  .my-score.final { font-size: 5rem; }
-  .pulse {
-    width: 20px;
-    height: 20px;
-    background: #00b894;
-    border-radius: 50%;
+  /* ── Score display ── */
+  .score-circle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 160px;
+    height: 160px;
     margin: 2rem auto;
-    animation: pulse 1.5s ease-in-out infinite;
+    border: 4px solid var(--accent-yellow);
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.3);
+    box-shadow: 0 0 30px rgba(242, 183, 5, 0.2);
   }
+  .score-circle.final {
+    width: 200px;
+    height: 200px;
+    border-width: 5px;
+    box-shadow: 0 0 40px rgba(242, 183, 5, 0.3);
+  }
+  .my-score {
+    font-family: var(--font-hero);
+    font-size: 4rem;
+    color: var(--accent-yellow);
+    text-shadow: 2px 2px 0 var(--charcoal);
+    line-height: 1;
+  }
+  .score-circle.final .my-score { font-size: 5rem; }
+  .pts-label {
+    font-family: var(--font-hero);
+    font-size: 1.2rem;
+    color: var(--cream-dim);
+    letter-spacing: 0.2em;
+  }
+  .thanks {
+    font-family: var(--font-comic);
+    font-size: 1.1rem;
+    color: var(--cream-dim);
+    margin-top: 1rem;
+  }
+
+  /* ── Animations ── */
   @keyframes pulse {
     0%, 100% { transform: scale(1); opacity: 1; }
     50% { transform: scale(1.5); opacity: 0.5; }
+  }
+  @keyframes flicker {
+    0% { transform: scale(1) rotate(-2deg); }
+    50% { transform: scale(1.05) rotate(1deg); }
+    100% { transform: scale(1) rotate(-1deg); }
   }
 </style>
