@@ -41,12 +41,17 @@ app.get('/api/room', (req, res) => {
 
 // QR code endpoint — encodes the player join URL
 app.get('/api/qr', async (req, res) => {
+  const host = req.get('host') || '';
+  const isLocalhost = host.startsWith('localhost') || host.startsWith('127.0.0.1');
   let joinUrl;
-  if (process.env.NODE_ENV === 'production') {
-    joinUrl = `${req.protocol}://${req.get('host')}/#/play`;
+  if (!isLocalhost) {
+    // Real domain (Railway, etc) — use the request host directly
+    joinUrl = `${req.protocol}://${host}/#/play`;
   } else {
+    // Local machine — swap localhost for LAN IP so phones can reach it
     const lanIP = getLanIP();
-    joinUrl = `http://${lanIP}:5173/#/play`;
+    const port = host.split(':')[1] || '80';
+    joinUrl = `http://${lanIP}:${port}/#/play`;
   }
   try {
     const svg = await QRCode.toString(joinUrl, { type: 'svg' });
